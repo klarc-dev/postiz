@@ -1,5 +1,7 @@
 import {
+  ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDefined,
   IsIn,
   IsOptional,
@@ -15,6 +17,7 @@ import {
 } from 'class-validator';
 import { MediaDto } from '@gitroom/nestjs-libraries/dtos/media/media.dto';
 import { Type } from 'class-transformer';
+import { JSONSchema } from 'class-validator-jsonschema';
 
 // YouTube caps the combined length of all tags at 500 characters.
 // Tags containing whitespace are wrapped in quotes by YouTube, which adds
@@ -63,6 +66,42 @@ export class YoutubeTagsSettings {
   label: string;
 }
 
+export class YoutubeCaption {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(35)
+  @IsDefined()
+  @JSONSchema({
+    description:
+      'BCP-47 language of the caption track, for example "fr" or "en-US".',
+  })
+  language: string;
+
+  @IsString()
+  @MaxLength(150)
+  @IsOptional()
+  @JSONSchema({
+    description:
+      'Optional track name shown to viewers. A track is only inserted once per language and name.',
+  })
+  name?: string;
+
+  @IsString()
+  @MinLength(1)
+  @IsDefined()
+  @JSONSchema({
+    description: 'The complete caption file content in SRT (or WebVTT) format.',
+  })
+  srt: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @JSONSchema({
+    description: 'Upload the track as a draft that viewers cannot see yet.',
+  })
+  isDraft?: boolean;
+}
+
 export class YoutubeSettingsDto {
   @IsString()
   @MinLength(2)
@@ -89,4 +128,23 @@ export class YoutubeSettingsDto {
   @IsYoutubeTagsLength()
   @Type(() => YoutubeTagsSettings)
   tags: YoutubeTagsSettings[];
+
+  @IsString()
+  @IsOptional()
+  @JSONSchema({
+    description:
+      'Optional id of a playlist owned by the channel, from the getPlaylists integration tool. The published video is added to it.',
+  })
+  playlistId?: string;
+
+  @IsArray()
+  @IsOptional()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => YoutubeCaption)
+  @JSONSchema({
+    description:
+      'Optional caption tracks uploaded to the video once it is published.',
+  })
+  captions?: YoutubeCaption[];
 }

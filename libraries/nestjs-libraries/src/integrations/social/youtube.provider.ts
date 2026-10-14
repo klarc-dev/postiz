@@ -8,9 +8,12 @@ import {
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { Integration } from '@prisma/client';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
-import { google } from 'googleapis';
+import { google, youtube_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library/build/src/auth/oauth2client';
-import { YoutubeSettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/youtube.settings.dto';
+import {
+  YoutubeCaption,
+  YoutubeSettingsDto,
+} from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/youtube.settings.dto';
 import {
   BadBody,
   RefreshToken,
@@ -24,6 +27,8 @@ import { createReadStream, statSync } from 'fs';
 import { getSsrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
 import { setHeartbeatDetails } from '@gitroom/nestjs-libraries/temporal/temporal.heartbeat';
 import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorator';
+import { Tool } from '@gitroom/nestjs-libraries/integrations/tool.decorator';
+import { Readable } from 'stream';
 
 const clientAndYoutube = () => {
   const client = new google.auth.OAuth2({
@@ -53,7 +58,9 @@ const clientAndYoutube = () => {
   return { client, youtube, oauth2, youtubeAnalytics };
 };
 
-@Rules('YouTube must have on video attachment, it cannot be empty')
+@Rules(
+  'YouTube must have one video attachment, it cannot be empty. Optional: playlistId (an id returned by the getPlaylists tool, never guessed from a title) adds the published video to that playlist; captions uploads SRT caption tracks once the video exists.'
+)
 export class YoutubeProvider extends SocialAbstract implements SocialProvider {
   override maxConcurrentJob = 200; // YouTube has strict upload quotas
   identifier = 'youtube';
@@ -198,6 +205,22 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
         type: 'bad-body',
         value:
           'We have uploaded your video but the thumbnail image is too wide.',
+      };
+    }
+
+    if (body.includes('captionExists')) {
+      return {
+        type: 'bad-body',
+        value:
+          'We have uploaded your video but a caption track for this language already exists.',
+      };
+    }
+
+    if (body.includes('playlistNotFound')) {
+      return {
+        type: 'bad-body',
+        value:
+          'We have uploaded your video but the selected playlist no longer exists.',
       };
     }
 
@@ -580,6 +603,14 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
 
     const { settings }: { settings: YoutubeSettingsDto } = firstPost;
     const path = firstPost?.media?.[0]?.path!;
+    if (settings?.playlistId) {
+      // Fail before anything exists on the channel rather than after upload.
+      await this.validateOwnedPlaylist(
+        accessToken,
+        settings.playlistId,
+        integration.internalId
+      );
+    }
     const videoSize = await this.youtubeMediaSize(path);
 
     // Start a resumable upload session: nothing exists on the channel until
@@ -633,6 +664,8 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
           path,
           uploadedBytes: 0,
           thumbnail: settings?.thumbnail?.path || '',
+          playlistId: settings?.playlistId || '',
+          captions: settings?.captions || [],
         },
       },
     ];
@@ -646,6 +679,8 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       path: string;
       uploadedBytes: number;
       thumbnail: string;
+      playlistId?: string;
+      captions?: YoutubeCaption[];
       videoId?: string;
     },
     integration: Integration
@@ -666,9 +701,14 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       return { status: 'pending', pendingData };
     }
 
-    // the upload completed: the video exists, only the thumbnail may be left
+    // the upload completed: the video exists, only the thumbnail, playlist and
+    // captions may be left
     if ('videoId' in probe) {
-      if (pendingData.thumbnail) {
+      if (
+        pendingData.thumbnail ||
+        pendingData.playlistId ||
+        pendingData.captions?.length
+      ) {
         return {
           status: 'ready',
           pendingData: { ...pendingData, videoId: probe.videoId },
@@ -697,6 +737,8 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       path: string;
       uploadedBytes: number;
       thumbnail: string;
+      playlistId?: string;
+      captions?: YoutubeCaption[];
       videoId?: string;
     },
     integration: Integration
@@ -831,11 +873,161 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       );
     }
 
+    // Playlist and captions run after the video exists. Both are idempotent so
+    // a retried finalizePost never duplicates a playlist item or a track.
+    if (pendingData.playlistId) {
+      await this.ensurePlaylistMembership(
+        accessToken,
+        pendingData.playlistId,
+        videoId
+      );
+    }
+
+    if (pendingData.captions?.length) {
+      await this.ensureCaptions(accessToken, videoId, pendingData.captions);
+    }
+
     return {
       status: 'completed',
       postId: videoId,
       releaseURL: `https://www.youtube.com/watch?v=${videoId}`,
     };
+  }
+
+  @Tool({
+    description:
+      'List every playlist owned by the connected YouTube channel. Use the returned id as playlistId; never guess it from a title.',
+    dataSchema: [],
+  })
+  async getPlaylists(accessToken: string) {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const youtubeClient = youtube(client);
+    const playlists: Array<{ id: string; name: string; privacy: string }> = [];
+    let pageToken: string | undefined;
+
+    do {
+      const response = await youtubeClient.playlists.list({
+        part: ['snippet', 'status'],
+        mine: true,
+        maxResults: 50,
+        pageToken,
+      });
+
+      for (const playlist of response.data.items ?? []) {
+        if (playlist.id) {
+          playlists.push({
+            id: playlist.id,
+            name: playlist.snippet?.title || 'Untitled playlist',
+            privacy: playlist.status?.privacyStatus || '',
+          });
+        }
+      }
+
+      pageToken = response.data.nextPageToken || undefined;
+    } while (pageToken);
+
+    return playlists;
+  }
+
+  private async validateOwnedPlaylist(
+    accessToken: string,
+    playlistId: string,
+    channelId: string
+  ) {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const response = await youtube(client).playlists.list({
+      part: ['snippet'],
+      id: [playlistId],
+      maxResults: 1,
+    });
+    const playlist = response.data.items?.[0];
+
+    if (!playlist || playlist.snippet?.channelId !== channelId) {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'The selected playlist does not exist on the connected YouTube channel. Pick it again from getPlaylists.'
+      );
+    }
+  }
+
+  private async ensurePlaylistMembership(
+    accessToken: string,
+    playlistId: string,
+    videoId: string
+  ) {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const youtubeClient = youtube(client);
+    const existing = await this.runInConcurrent(async () =>
+      youtubeClient.playlistItems.list({
+        part: ['id'],
+        playlistId,
+        videoId,
+        maxResults: 1,
+      })
+    );
+
+    if (existing.data.items?.length) {
+      return;
+    }
+
+    await this.runInConcurrent(async () =>
+      youtubeClient.playlistItems.insert({
+        part: ['snippet'],
+        requestBody: {
+          snippet: {
+            playlistId,
+            resourceId: { kind: 'youtube#video', videoId },
+          },
+        },
+      })
+    );
+  }
+
+  private async ensureCaptions(
+    accessToken: string,
+    videoId: string,
+    captions: YoutubeCaption[]
+  ) {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const youtubeClient = youtube(client);
+    const existing = await this.runInConcurrent(async () =>
+      youtubeClient.captions.list({ part: ['snippet'], videoId })
+    );
+    const present = new Set(
+      ((existing.data.items ?? []) as youtube_v3.Schema$Caption[]).map(
+        (track) => `${track.snippet?.language}|${track.snippet?.name || ''}`
+      )
+    );
+
+    for (const caption of captions) {
+      if (present.has(`${caption.language}|${caption.name || ''}`)) {
+        continue;
+      }
+
+      await this.runInConcurrent(async () =>
+        youtubeClient.captions.insert({
+          part: ['snippet'],
+          requestBody: {
+            snippet: {
+              videoId,
+              language: caption.language,
+              name: caption.name || '',
+              isDraft: caption.isDraft ?? false,
+            },
+          },
+          media: {
+            mimeType: 'application/octet-stream',
+            body: Readable.from([caption.srt]),
+          },
+        })
+      );
+    }
   }
 
   // Old blocking behavior, kept for workflow versions before v1.0.6 that still

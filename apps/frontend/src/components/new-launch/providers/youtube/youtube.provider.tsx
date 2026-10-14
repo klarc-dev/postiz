@@ -12,6 +12,8 @@ import { MediumTags } from '@gitroom/frontend/components/new-launch/providers/me
 import { MediaComponent } from '@gitroom/frontend/components/media/media.component';
 import { Select } from '@gitroom/react/form/select';
 import { YoutubePreview } from '@gitroom/frontend/components/new-launch/providers/youtube/youtube.preview';
+import { YoutubePlaylist } from '@gitroom/frontend/components/new-launch/providers/youtube/youtube.playlist';
+import { YoutubeCaptions } from '@gitroom/frontend/components/new-launch/providers/youtube/youtube.captions';
 const type = [
   {
     label: 'Public',
@@ -54,6 +56,7 @@ const YoutubeSettings: FC = () => {
           </option>
         ))}
       </Select>
+      <YoutubePlaylist {...register('playlistId')} />
       <Select
         label="Made for kids"
         {...register('selfDeclaredMadeForKids', {
@@ -77,6 +80,7 @@ const YoutubeSettings: FC = () => {
           {...register('thumbnail')}
         />
       </div>
+      <YoutubeCaptions {...register('captions')} />
     </div>
   );
 };
