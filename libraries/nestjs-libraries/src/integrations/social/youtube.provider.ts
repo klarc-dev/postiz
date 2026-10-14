@@ -987,6 +987,121 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
+  // Backfill tools for videos already published (their Postiz post can no
+  // longer be edited). Each one checks that the video belongs to the connected
+  // channel and is idempotent.
+  @Tool({
+    description:
+      'Read the caption tracks of a video on the connected channel and, when playlistId is given, whether the video is in that playlist.',
+    dataSchema: [
+      { key: 'videoId', type: 'string', description: 'YouTube video id (the post releaseId)' },
+      { key: 'playlistId', type: 'string', description: 'Optional playlist id to check membership' },
+    ],
+  })
+  async getVideoExtras(
+    accessToken: string,
+    data: { videoId?: string; playlistId?: string },
+    channelId: string
+  ) {
+    const videoId = await this.ownedVideo(accessToken, data?.videoId, channelId);
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const youtubeClient = youtube(client);
+    const captions = await this.youtubeCall(() =>
+      youtubeClient.captions.list({ part: ['snippet'], videoId })
+    );
+    let inPlaylist: boolean | undefined;
+    if (data?.playlistId) {
+      const items = await this.youtubeCall(() =>
+        youtubeClient.playlistItems.list({
+          part: ['id'],
+          playlistId: data.playlistId!,
+          videoId,
+          maxResults: 1,
+        })
+      );
+      inPlaylist = !!items.data.items?.length;
+    }
+    return {
+      videoId,
+      captions: (captions.data.items ?? []).map((track) => ({
+        id: track.id,
+        language: track.snippet?.language,
+        name: track.snippet?.name || '',
+        trackKind: track.snippet?.trackKind,
+        isDraft: track.snippet?.isDraft,
+      })),
+      ...(data?.playlistId ? { playlistId: data.playlistId, inPlaylist } : {}),
+    };
+  }
+
+  @Tool({
+    description:
+      'Add an already published video of the connected channel to one of its playlists (no-op if it is already there).',
+    dataSchema: [
+      { key: 'videoId', type: 'string', description: 'YouTube video id (the post releaseId)' },
+      { key: 'playlistId', type: 'string', description: 'Playlist id from getPlaylists' },
+    ],
+  })
+  async addVideoToPlaylist(
+    accessToken: string,
+    data: { videoId?: string; playlistId?: string },
+    channelId: string
+  ) {
+    const videoId = await this.ownedVideo(accessToken, data?.videoId, channelId);
+    const playlistId = String(data?.playlistId || '').trim();
+    await this.validateOwnedPlaylist(accessToken, playlistId, channelId);
+    const added = await this.ensurePlaylistMembership(accessToken, playlistId, videoId);
+    return { videoId, playlistId, status: added ? 'inserted' : 'already_member' };
+  }
+
+  @Tool({
+    description:
+      'Upload a caption track (SRT or WebVTT content) to an already published video of the connected channel (no-op if a track with the same language and name exists).',
+    dataSchema: [
+      { key: 'videoId', type: 'string', description: 'YouTube video id (the post releaseId)' },
+      { key: 'language', type: 'string', description: 'BCP-47 language, e.g. fr' },
+      { key: 'name', type: 'string', description: 'Optional track name' },
+      { key: 'srt', type: 'string', description: 'Complete caption file content' },
+    ],
+  })
+  async addCaptionTrack(
+    accessToken: string,
+    data: { videoId?: string; language?: string; name?: string; srt?: string },
+    channelId: string
+  ) {
+    const videoId = await this.ownedVideo(accessToken, data?.videoId, channelId);
+    const language = String(data?.language || '').trim();
+    if (!language || !data?.srt) {
+      throw new BadBody(this.identifier, '{}', '{}', 'language and srt are required');
+    }
+    const inserted = await this.ensureCaptions(accessToken, videoId, [
+      { language, name: data.name || '', srt: data.srt },
+    ]);
+    return { videoId, language, name: data.name || '', status: inserted ? 'inserted' : 'already_present' };
+  }
+
+  private async ownedVideo(accessToken: string, videoId: string | undefined, channelId: string) {
+    const id = String(videoId || '').trim();
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const response = id
+      ? await this.youtubeCall(() =>
+          youtube(client).videos.list({ part: ['snippet'], id: [id], maxResults: 1 })
+        )
+      : undefined;
+    const video = response?.data.items?.[0];
+    if (!video || video.snippet?.channelId !== channelId) {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'This video does not exist on the connected YouTube channel.'
+      );
+    }
+    return id;
+  }
+
   private async validateOwnedPlaylist(
     accessToken: string,
     playlistId: string,
@@ -1049,7 +1164,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     );
 
     if (existing.data.items?.length) {
-      return;
+      return false;
     }
 
     await this.runInConcurrent(async () =>
@@ -1063,6 +1178,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
         },
       })
     );
+    return true;
   }
 
   private async ensureCaptions(
@@ -1082,10 +1198,12 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       )
     );
 
+    let inserted = 0;
     for (const caption of captions) {
       if (present.has(`${caption.language}|${caption.name || ''}`)) {
         continue;
       }
+      inserted++;
 
       await this.runInConcurrent(async () =>
         youtubeClient.captions.insert({
@@ -1105,6 +1223,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
         })
       );
     }
+    return inserted;
   }
 
   // Old blocking behavior, kept for workflow versions before v1.0.6 that still

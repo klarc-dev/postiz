@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 
 const youtubeApi = {
   playlists: { list: jest.fn(), insert: jest.fn() },
+  videos: { list: jest.fn() },
   playlistItems: { list: jest.fn(), insert: jest.fn() },
   captions: { list: jest.fn(), insert: jest.fn() },
 };
@@ -96,6 +97,34 @@ describe('YoutubeProvider playlist and captions', () => {
     const result = await provider.createPlaylist('token', { title: 'Series', description: 'd' });
     expect(result).toMatchObject({ id: 'PL2', created: true });
     expect(youtubeApi.playlists.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses backfill on a video of another channel', async () => {
+    youtubeApi.videos.list.mockResolvedValue({ data: { items: [{ id: 'v', snippet: { channelId: 'other' } }] } });
+    await expect(
+      provider.addCaptionTrack('token', { videoId: 'v', language: 'fr', srt: 'x' }, 'mine')
+    ).rejects.toThrow();
+    expect(youtubeApi.captions.insert).not.toHaveBeenCalled();
+  });
+
+  it('backfills a caption track once and reports an existing one', async () => {
+    youtubeApi.videos.list.mockResolvedValue({ data: { items: [{ id: 'v', snippet: { channelId: 'mine' } }] } });
+    youtubeApi.captions.list.mockResolvedValueOnce({ data: { items: [] } });
+    youtubeApi.captions.insert.mockResolvedValue({ data: { id: 'c' } });
+    const first = await provider.addCaptionTrack('token', { videoId: 'v', language: 'fr', srt: 'x' }, 'mine');
+    youtubeApi.captions.list.mockResolvedValueOnce({ data: { items: [{ snippet: { language: 'fr', name: '' } }] } });
+    const second = await provider.addCaptionTrack('token', { videoId: 'v', language: 'fr', srt: 'x' }, 'mine');
+    expect([first.status, second.status]).toEqual(['inserted', 'already_present']);
+    expect(youtubeApi.captions.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('backfills playlist membership only for an owned playlist', async () => {
+    youtubeApi.videos.list.mockResolvedValue({ data: { items: [{ id: 'v', snippet: { channelId: 'mine' } }] } });
+    youtubeApi.playlists.list.mockResolvedValue({ data: { items: [{ id: 'PL', snippet: { channelId: 'mine' } }] } });
+    youtubeApi.playlistItems.list.mockResolvedValue({ data: { items: [] } });
+    youtubeApi.playlistItems.insert.mockResolvedValue({ data: { id: 'i' } });
+    const result = await provider.addVideoToPlaylist('token', { videoId: 'v', playlistId: 'PL' }, 'mine');
+    expect(result.status).toBe('inserted');
   });
 
   it('validates the playlist before opening the upload session', () => {
