@@ -18,6 +18,8 @@ jest.mock('googleapis', () => ({
 
 // eslint-disable-next-line import/first
 import { YoutubeProvider } from './youtube.provider';
+// eslint-disable-next-line import/first
+import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
 
 describe('YoutubeProvider playlist and captions', () => {
   const provider = new YoutubeProvider() as any;
@@ -70,6 +72,11 @@ describe('YoutubeProvider playlist and captions', () => {
       data: { items: [{ id: 'PL1', snippet: { channelId: 'other' } }] },
     });
     await expect(provider.validateOwnedPlaylist('token', 'PL1', 'mine')).rejects.toThrow();
+  });
+
+  it('maps an expired token on getPlaylists to RefreshToken', async () => {
+    youtubeApi.playlists.list.mockRejectedValue({ response: { status: 401, data: {} } });
+    await expect(provider.getPlaylists('expired')).rejects.toBeInstanceOf(RefreshToken);
   });
 
   it('validates the playlist before opening the upload session', () => {

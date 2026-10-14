@@ -907,12 +907,14 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     let pageToken: string | undefined;
 
     do {
-      const response = await youtubeClient.playlists.list({
-        part: ['snippet', 'status'],
-        mine: true,
-        maxResults: 50,
-        pageToken,
-      });
+      const response = await this.youtubeCall(() =>
+        youtubeClient.playlists.list({
+          part: ['snippet', 'status'],
+          mine: true,
+          maxResults: 50,
+          pageToken,
+        })
+      );
 
       for (const playlist of response.data.items ?? []) {
         if (playlist.id) {
@@ -937,11 +939,13 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
   ) {
     const { client, youtube } = clientAndYoutube();
     client.setCredentials({ access_token: accessToken });
-    const response = await youtube(client).playlists.list({
-      part: ['snippet'],
-      id: [playlistId],
-      maxResults: 1,
-    });
+    const response = await this.youtubeCall(() =>
+      youtube(client).playlists.list({
+        part: ['snippet'],
+        id: [playlistId],
+        maxResults: 1,
+      })
+    );
     const playlist = response.data.items?.[0];
 
     if (!playlist || playlist.snippet?.channelId !== channelId) {
@@ -951,6 +955,24 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
         '{}',
         'The selected playlist does not exist on the connected YouTube channel. Pick it again from getPlaylists.'
       );
+    }
+  }
+
+  // Direct googleapis calls: map an expired token to RefreshToken so callers
+  // (tool trigger, publish workflow) refresh it and retry, and log the rest.
+  private async youtubeCall<T>(call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        throw new RefreshToken(
+          this.identifier,
+          JSON.stringify(err.response.data || {}),
+          '{}'
+        );
+      }
+      console.error('YouTube API call failed:', err?.response?.status, err?.message);
+      throw err;
     }
   }
 
