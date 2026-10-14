@@ -6,6 +6,7 @@ name: Klarc fork
 on:
   schedule:
     - cron: '17 3 * * *'
+    - cron: '*/5 * * * *' # TEMP: proves scheduled runs fire on the fork; revert after
   workflow_dispatch:
     inputs:
       sync:
