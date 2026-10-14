@@ -2,8 +2,11 @@
 
 `klarc/main` = the latest upstream `gitroomhq/postiz-app` release tag (what upstream ships
 as `:latest`) + a small stack of Klarc commits.
-Production (Coolify, `klarc-dev/klarc-services/postiz/docker-compose.yaml`) runs
-`ghcr.io/klarc-dev/postiz-app:klarc-latest`.
+Canonical repository: `klarc-dev/postiz` (standalone, not a GitHub fork, because
+GitHub disables scheduled workflows on forks). Production (Coolify,
+`klarc-dev/klarc-services/postiz/docker-compose.yaml`) runs
+`ghcr.io/klarc-dev/postiz:klarc-latest`. The earlier fork `klarc-dev/postiz-app`
+is no longer updated by CI.
 
 ## What the patch adds (YouTube)
 

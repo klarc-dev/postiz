@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/klarc-dev/postiz-app
+  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   sync-test-build:
@@ -112,7 +112,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push the image
         if: steps.build.outputs.needed == 'true'
