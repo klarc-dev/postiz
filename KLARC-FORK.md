@@ -10,7 +10,8 @@ Production (Coolify, `klarc-dev/klarc-services/postiz/docker-compose.yaml`) runs
 - `playlistId` (optional) in the YouTube post settings: checked against the
   connected channel before the upload starts, then the published video is added
   to the playlist. `getPlaylists` integration tool lists the channel's playlists
-  (UI selector, CLI `integrations:trigger <id> getPlaylists`).
+  (UI selector, CLI `integrations:trigger <id> getPlaylists`), and `createPlaylist`
+  creates one (or returns the existing owned playlist with that exact title).
 - `captions[]` (optional) `{ language, name?, srt, isDraft? }`: uploaded with
   `captions.insert` once the video exists. UI: "Subtitles" file picker.
 - Both run in `finalizePost` after the thumbnail and are idempotent (existing

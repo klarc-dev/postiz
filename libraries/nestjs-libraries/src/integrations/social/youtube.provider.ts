@@ -932,6 +932,61 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     return playlists;
   }
 
+  @Tool({
+    description:
+      'Create a playlist on the connected YouTube channel, or return the existing owned playlist with exactly this title (never creates a duplicate). Returns its id for playlistId.',
+    dataSchema: [
+      { key: 'title', type: 'string', description: 'Exact playlist title' },
+      { key: 'description', type: 'string', description: 'Playlist description (optional)' },
+      { key: 'privacy', type: 'string', description: 'public, unlisted or private; defaults to public' },
+    ],
+  })
+  async createPlaylist(
+    accessToken: string,
+    data: { title?: string; description?: string; privacy?: string }
+  ) {
+    const title = String(data?.title || '').trim();
+    if (!title) {
+      throw new BadBody(this.identifier, '{}', '{}', 'A playlist title is required');
+    }
+    const privacy = ['public', 'unlisted', 'private'].includes(data?.privacy || '')
+      ? data.privacy!
+      : 'public';
+    const existing = (await this.getPlaylists(accessToken)).filter(
+      (playlist) => playlist.name.trim().toLowerCase() === title.toLowerCase()
+    );
+    if (existing.length > 1) {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        `Several owned playlists are titled "${title}": ${existing.map((p) => p.id).join(', ')}`
+      );
+    }
+    if (existing.length === 1) {
+      return { ...existing[0], created: false };
+    }
+
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const response = await this.youtubeCall(() =>
+      youtube(client).playlists.insert({
+        part: ['snippet', 'status'],
+        requestBody: {
+          snippet: { title, description: data?.description || '' },
+          status: { privacyStatus: privacy },
+        },
+      })
+    );
+
+    return {
+      id: response.data.id!,
+      name: response.data.snippet?.title || title,
+      privacy: response.data.status?.privacyStatus || privacy,
+      created: true,
+    };
+  }
+
   private async validateOwnedPlaylist(
     accessToken: string,
     playlistId: string,

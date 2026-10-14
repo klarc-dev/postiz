@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { readFileSync } from 'fs';
 
 const youtubeApi = {
-  playlists: { list: jest.fn() },
+  playlists: { list: jest.fn(), insert: jest.fn() },
   playlistItems: { list: jest.fn(), insert: jest.fn() },
   captions: { list: jest.fn(), insert: jest.fn() },
 };
@@ -77,6 +77,25 @@ describe('YoutubeProvider playlist and captions', () => {
   it('maps an expired token on getPlaylists to RefreshToken', async () => {
     youtubeApi.playlists.list.mockRejectedValue({ response: { status: 401, data: {} } });
     await expect(provider.getPlaylists('expired')).rejects.toBeInstanceOf(RefreshToken);
+  });
+
+  it('returns an existing playlist instead of creating a duplicate', async () => {
+    youtubeApi.playlists.list.mockResolvedValue({
+      data: { items: [{ id: 'PL1', snippet: { title: 'Series' }, status: { privacyStatus: 'public' } }] },
+    });
+    const result = await provider.createPlaylist('token', { title: ' series ' });
+    expect(result).toMatchObject({ id: 'PL1', created: false });
+    expect(youtubeApi.playlists.insert).not.toHaveBeenCalled();
+  });
+
+  it('creates a missing playlist once', async () => {
+    youtubeApi.playlists.list.mockResolvedValue({ data: { items: [] } });
+    youtubeApi.playlists.insert.mockResolvedValue({
+      data: { id: 'PL2', snippet: { title: 'Series' }, status: { privacyStatus: 'public' } },
+    });
+    const result = await provider.createPlaylist('token', { title: 'Series', description: 'd' });
+    expect(result).toMatchObject({ id: 'PL2', created: true });
+    expect(youtubeApi.playlists.insert).toHaveBeenCalledTimes(1);
   });
 
   it('validates the playlist before opening the upload session', () => {
