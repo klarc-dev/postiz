@@ -22,6 +22,20 @@ Files: `youtube.settings.dto.ts`, `youtube.provider.ts`, frontend
 `youtube.playlist.tsx`, `youtube.captions.tsx`, `youtube.provider.tsx`; tests in
 the two `*.spec.ts` files next to them, run by `jest.klarc.config.js`.
 
+## What the patch adds (WordPress)
+
+- Optional, validated settings sent as native WordPress REST properties:
+  `excerpt`, `slug` (explicit, `a-z0-9-`; replaces the slug generated from the
+  title), `author` (user id, `authorsList` tool) and `voxel_fields` (Voxel addon
+  sites; plain JSON object, safe keys, no `__proto__`/`constructor`/`prototype`,
+  depth ≤ 16, ≤ 64 KiB, ≤ 200 fields; `voxelFieldsSample` shows a type's keys).
+- The request body is built from an allowlist (`buildWordpressPostBody`): title,
+  content, status, categories, tags, featured media as upstream; omitted new
+  fields are not sent, so they never clear stored values; `voxel_fields` is sent
+  whole and re-validated in the provider before any media upload.
+- WordPress/Voxel rejections (`rest_invalid_param`, `rest_invalid_voxel_fields`,
+  author errors…) fail the post with WordPress's own message.
+
 ## Staying up to date
 
 `.github/workflows/klarc-fork.yml` runs daily (and on demand / on push):

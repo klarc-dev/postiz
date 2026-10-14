@@ -4,11 +4,17 @@ import {
   PostResponse,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
-import { SocialAbstract } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import {
+  BadBody,
+  SocialAbstract,
+} from '@gitroom/nestjs-libraries/integrations/social.abstract';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
-import { WordpressDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
+import {
+  voxelFieldsProblem,
+  WordpressDto,
+} from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
 import slugify from 'slugify';
 // import FormData from 'form-data';
 import { Tool } from '@gitroom/nestjs-libraries/integrations/tool.decorator';
@@ -17,6 +23,82 @@ import { getSsrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/s
 import { string } from 'yup';
 
 const WORDPRESS_USER_AGENT = 'Postiz/1.0 (+https://postiz.com)';
+
+/**
+ * The exact JSON body sent to `POST /wp-json/wp/v2/<type>`, built from an
+ * allowlist so no other setting can reach WordPress. Precedence:
+ * - title, content, status, categories, tags and featured media as upstream;
+ * - slug: the explicit `slug` setting wins over the slug generated from title;
+ * - excerpt, author and voxel_fields are only sent when the setting is present,
+ *   so an omitted value never clears what WordPress already stores.
+ * voxel_fields is re-validated here (defence in depth) and sent whole, never
+ * merged: the receiving Voxel adapter validates every field again.
+ */
+export function buildWordpressPostBody(
+  settings: WordpressDto,
+  content: string,
+  mediaId?: string | number
+) {
+  const numbers = (values?: number[]) =>
+    (values || []).map((value) => Number(value)).filter((value) => !isNaN(value));
+  const categories = numbers(settings?.categories);
+  const tags = numbers(settings?.tags);
+
+  if (settings?.voxel_fields !== undefined) {
+    const problem = voxelFieldsProblem(settings.voxel_fields);
+    if (problem) {
+      throw new BadBody('wordpress', '{}', '{}', problem);
+    }
+  }
+  if (
+    settings?.author !== undefined &&
+    !(Number.isInteger(settings.author) && settings.author > 0)
+  ) {
+    throw new BadBody('wordpress', '{}', '{}', 'author must be a WordPress user id');
+  }
+
+  return {
+    title: settings?.title,
+    content,
+    slug:
+      settings?.slug ||
+      slugify(settings?.title || '', { lower: true, strict: true, trim: true }),
+    status: settings?.status || 'publish',
+    ...(categories.length ? { categories } : {}),
+    ...(tags.length ? { tags } : {}),
+    ...(mediaId ? { featured_media: mediaId } : {}),
+    ...(settings?.excerpt !== undefined ? { excerpt: settings.excerpt } : {}),
+    ...(settings?.author !== undefined ? { author: settings.author } : {}),
+    ...(settings?.voxel_fields !== undefined
+      ? { voxel_fields: settings.voxel_fields }
+      : {}),
+  };
+}
+
+/** WordPress / Voxel REST error JSON -> one readable message, or undefined. */
+export function wordpressErrorMessage(body: string): string | undefined {
+  try {
+    const json = JSON.parse(body);
+    if (!json || typeof json.code !== 'string') {
+      return undefined;
+    }
+    const details = [
+      ...Object.entries<any>(json.data?.params || {}).map(([key, value]) => `${key}: ${value}`),
+      ...(Array.isArray(json.data?.errors)
+        ? json.data.errors.map((error: any) =>
+            typeof error === 'string' ? error : error?.message || JSON.stringify(error)
+          )
+        : Object.entries<any>(json.data?.errors || {}).map(
+            ([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`
+          )),
+    ];
+    return `WordPress rejected the post (${json.code}): ${json.message || ''}${
+      details.length ? ' ' + details.join('; ') : ''
+    }`.slice(0, 1000);
+  } catch {
+    return undefined;
+  }
+}
 
 @Rules(
   'WordPress publishes the content as an article: pictures go inside the content as <img src="..."> where they should appear, the src must be a picture from the media library (upload it with uploadFromUrlTool first), attachments are not published, the cover picture is the main_image setting'
@@ -69,6 +151,16 @@ export class WordpressProvider
       return {
         type: 'bad-body',
         value: 'The connect user has insufficient permissions to create posts',
+      };
+    }
+    if (
+      /rest_invalid_param|rest_invalid_voxel_fields|rest_cannot_edit_others|rest_invalid_author|rest_post_exists|rest_invalid_content_envelope/.test(
+        body
+      )
+    ) {
+      return {
+        type: 'bad-body',
+        value: wordpressErrorMessage(body) || 'WordPress rejected the post',
       };
     }
     return undefined;
@@ -288,6 +380,49 @@ export class WordpressProvider
     }));
   }
 
+  @Tool({
+    description:
+      'List WordPress users that can be set as author (id and name). Use the id as the author setting.',
+    dataSchema: [],
+  })
+  async authorsList(token: string) {
+    const users = await this.wpGet(token, '/wp-json/wp/v2/users?per_page=100');
+
+    return (Array.isArray(users) ? users : []).map((user: any) => ({
+      id: user.id,
+      name: user.name,
+    }));
+  }
+
+  @Tool({
+    description:
+      'Show the voxel_fields keys and value shapes of the most recent post of a type (Voxel addon sites), to build a valid voxel_fields setting. Returns an empty object when the site exposes no voxel_fields.',
+    dataSchema: [
+      {
+        key: 'type',
+        type: 'string',
+        description: 'WordPress REST base of the post type, e.g. posts',
+      },
+    ],
+  })
+  async voxelFieldsSample(token: string, data: { type?: string }) {
+    const type = String(data?.type || 'posts');
+    if (!/^[a-z0-9_-]+$/i.test(type)) {
+      throw new BadBody(this.identifier, '{}', '{}', 'type must be a REST base');
+    }
+    const posts = await this.wpGet(
+      token,
+      `/wp-json/wp/v2/${type}?per_page=1&context=edit&_fields=id,voxel_fields`
+    );
+    const sample = Array.isArray(posts) ? posts[0] : undefined;
+
+    return {
+      type,
+      postId: sample?.id ?? null,
+      voxel_fields: sample?.voxel_fields ?? {},
+    };
+  }
+
   async post(
     id: string,
     accessToken: string,
@@ -303,6 +438,9 @@ export class WordpressProvider
     const auth = Buffer.from(`${body.username}:${body.password}`).toString(
       'base64'
     );
+
+    // Validate before any upload, so a rejected post leaves no orphan media.
+    buildWordpressPostBody(postDetails?.[0]?.settings, postDetails?.[0]?.message);
 
     let mediaId = '';
     if (postDetails?.[0]?.settings?.main_image?.path) {
@@ -333,12 +471,6 @@ export class WordpressProvider
       mediaId = mediaResponse.id;
     }
 
-    const categories = (postDetails?.[0]?.settings?.categories || [])
-      .map((category) => Number(category))
-      .filter((category) => !isNaN(category));
-    const tags = (postDetails?.[0]?.settings?.tags || [])
-      .map((tag) => Number(tag))
-      .filter((tag) => !isNaN(tag));
 
     const submit = await (
       await this.fetch(
@@ -350,19 +482,13 @@ export class WordpressProvider
             'User-Agent': WORDPRESS_USER_AGENT,
           },
           method: 'POST',
-          body: JSON.stringify({
-            title: postDetails?.[0]?.settings?.title,
-            content: postDetails?.[0]?.message,
-            slug: slugify(postDetails?.[0]?.settings?.title, {
-              lower: true,
-              strict: true,
-              trim: true,
-            }),
-            status: postDetails?.[0]?.settings?.status || 'publish',
-            ...(categories.length ? { categories } : {}),
-            ...(tags.length ? { tags } : {}),
-            ...(mediaId ? { featured_media: mediaId } : {}),
-          }),
+          body: JSON.stringify(
+            buildWordpressPostBody(
+              postDetails?.[0]?.settings,
+              postDetails?.[0]?.message,
+              mediaId
+            )
+          ),
         }
       )
     ).json();

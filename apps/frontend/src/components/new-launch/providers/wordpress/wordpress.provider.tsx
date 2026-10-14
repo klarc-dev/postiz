@@ -12,6 +12,11 @@ import { WordpressPostType } from '@gitroom/frontend/components/new-launch/provi
 import { WordpressTerms } from '@gitroom/frontend/components/new-launch/providers/wordpress/wordpress.terms';
 import { MediaComponent } from '@gitroom/frontend/components/media/media.component';
 import { WordpressDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
+import {
+  WordpressAuthor,
+  WordpressOptionalText,
+  WordpressVoxelFields,
+} from '@gitroom/frontend/components/new-launch/providers/wordpress/wordpress.extras';
 
 const WordpressSettings: FC = () => {
   const form = useSettings();
@@ -40,6 +45,10 @@ const WordpressSettings: FC = () => {
         description="Add a cover picture"
         {...form.register('main_image')}
       />
+      <WordpressOptionalText name="slug" label="Slug (optional, replaces the generated one)" placeholder="mon-article" />
+      <WordpressOptionalText name="excerpt" label="Excerpt (optional)" multiline />
+      <WordpressAuthor name="author" />
+      <WordpressVoxelFields name="voxel_fields" />
     </>
   );
 };

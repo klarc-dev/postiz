@@ -6,6 +6,7 @@ module.exports = {
   testMatch: [
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/youtube.provider.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/dtos/posts/providers-settings/youtube.settings.dto.spec.ts',
+    '<rootDir>/libraries/nestjs-libraries/src/integrations/social/wordpress.provider.spec.ts',
   ],
   transform: {
     '^.+\\.ts$': [
