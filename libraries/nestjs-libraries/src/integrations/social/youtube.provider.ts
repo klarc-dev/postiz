@@ -1192,15 +1192,19 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     const existing = await this.runInConcurrent(async () =>
       youtubeClient.captions.list({ part: ['snippet'], videoId })
     );
+    // Ignore YouTube's automatic (asr) tracks, and treat "fr" and "fr-FR" as
+    // the same language so an existing uploaded French track is never doubled.
+    const key = (language?: string | null, name?: string | null) =>
+      `${(language || '').toLowerCase().split('-')[0]}|${name || ''}`;
     const present = new Set(
-      ((existing.data.items ?? []) as youtube_v3.Schema$Caption[]).map(
-        (track) => `${track.snippet?.language}|${track.snippet?.name || ''}`
-      )
+      ((existing.data.items ?? []) as youtube_v3.Schema$Caption[])
+        .filter((track) => track.snippet?.trackKind !== 'asr')
+        .map((track) => key(track.snippet?.language, track.snippet?.name))
     );
 
     let inserted = 0;
     for (const caption of captions) {
-      if (present.has(`${caption.language}|${caption.name || ''}`)) {
+      if (present.has(key(caption.language, caption.name))) {
         continue;
       }
       inserted++;

@@ -99,6 +99,18 @@ describe('YoutubeProvider playlist and captions', () => {
     expect(youtubeApi.playlists.insert).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores automatic tracks and matches fr with fr-FR', async () => {
+    youtubeApi.captions.list.mockResolvedValue({
+      data: { items: [{ snippet: { language: 'fr', name: '', trackKind: 'asr' } }] },
+    });
+    youtubeApi.captions.insert.mockResolvedValue({ data: { id: 'cap' } });
+    expect(await provider.ensureCaptions('token', 'vid', [{ language: 'fr', name: '', srt: 'a' }])).toBe(1);
+    youtubeApi.captions.list.mockResolvedValue({
+      data: { items: [{ snippet: { language: 'fr-FR', name: '', trackKind: 'standard' } }] },
+    });
+    expect(await provider.ensureCaptions('token', 'vid', [{ language: 'fr', name: '', srt: 'a' }])).toBe(0);
+  });
+
   it('refuses backfill on a video of another channel', async () => {
     youtubeApi.videos.list.mockResolvedValue({ data: { items: [{ id: 'v', snippet: { channelId: 'other' } }] } });
     await expect(
