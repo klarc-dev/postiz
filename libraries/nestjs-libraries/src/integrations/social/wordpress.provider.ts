@@ -82,7 +82,13 @@ export function wordpressErrorMessage(body: string): string | undefined {
     if (!json || typeof json.code !== 'string') {
       return undefined;
     }
+    // A PHP fatal error (WordPress "critical error" page) carries the real
+    // cause in data.error.message; surface it instead of the generic HTML.
+    const fatal = json.data?.error?.message
+      ? String(json.data.error.message).split('\n')[0]
+      : '';
     const details = [
+      ...(fatal ? [fatal] : []),
       ...Object.entries<any>(json.data?.params || {}).map(([key, value]) => `${key}: ${value}`),
       ...(Array.isArray(json.data?.errors)
         ? json.data.errors.map((error: any) =>
@@ -154,7 +160,7 @@ export class WordpressProvider
       };
     }
     if (
-      /rest_invalid_param|rest_invalid_voxel_fields|rest_cannot_edit_others|rest_invalid_author|rest_post_exists|rest_invalid_content_envelope/.test(
+      /rest_invalid_param|rest_invalid_voxel_fields|rest_cannot_edit_others|rest_invalid_author|rest_post_exists|rest_invalid_content_envelope|internal_server_error/.test(
         body
       )
     ) {

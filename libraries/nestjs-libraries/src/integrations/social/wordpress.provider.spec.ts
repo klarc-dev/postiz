@@ -116,6 +116,19 @@ describe('WordPress errors', () => {
     ).toMatchObject({ type: 'bad-body' });
   });
 
+  it('reports a WordPress fatal error with its cause and does not retry it', () => {
+    const provider = new WordpressProvider();
+    const body = JSON.stringify({
+      code: 'internal_server_error',
+      message: '<p>Il y a eu une erreur critique sur ce site.</p>',
+      data: { status: 500, error: { type: 1, message: 'Uncaught TypeError: lean_seo_flat_post_type_unique_slug(): Argument #2 ($post_id) must be of type int, null given\nStack trace...' } },
+    });
+    const handled = provider.handleErrors(body);
+    expect(handled).toMatchObject({ type: 'bad-body' });
+    expect(handled?.value).toContain('lean_seo_flat_post_type_unique_slug');
+    expect(handled?.value).not.toContain('Stack trace');
+  });
+
   it('exposes the authors and voxel field helper tools', () => {
     const tools = Reflect.getMetadata('custom:tool', WordpressProvider.prototype).map((t: any) => t.methodName);
     expect(tools).toEqual(expect.arrayContaining(['authorsList', 'voxelFieldsSample']));

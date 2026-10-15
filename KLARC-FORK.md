@@ -45,7 +45,11 @@ the two `*.spec.ts` files next to them, run by `jest.klarc.config.js`.
 rebase the Klarc commits on the latest upstream release → run the patch tests → push
 `klarc/main` → build and push `klarc-latest` plus `klarc-<date>-<sha>`.
 On a rebase conflict it stops, opens an issue, and production keeps the last
-good image. Resolve locally:
+good image. The daily run is kicked by `klarc-dev/klarc-services`
+(`.github/workflows/postiz-upstream-sync.yml`, 03:41 UTC, `GH_PAT`), because this
+repository's own schedule did not fire; the 03:17 cron here stays as a second
+chance. Production takes the new `klarc-latest` on its next Coolify redeploy
+(Coolify only redeploys on changes under `klarc-services/postiz/**`). Resolve locally:
 
 ```bash
 git fetch upstream --tags
@@ -56,6 +60,18 @@ git push --force-with-lease origin HEAD:klarc/main
 
 Keep the patch small and in its own files where possible. If upstream ever
 ships playlist/caption support, drop the Klarc commits instead of rebasing them.
+
+## Operations notes
+
+- After a Docker daemon restart, the orchestrator can start before Temporal and
+  keep running without workers (no pollers on the `main`/`youtube`/`wordpress`
+  task queues, posts stuck in QUEUE). Check with
+  `temporal task-queue describe --task-queue main` in the Temporal container;
+  fix with `pm2 restart orchestrator` in the Postiz container. If pm2 then loops
+  on `EADDRINUSE :::3002`, an orphan orchestrator still holds the port: stop it
+  (`kill -TERM <pid>` from `sh`) and pm2 recovers. Upstream behaviour, not the patch.
+- klarc.com: an explicit WordPress slug currently triggers a fatal error in the
+  Lean SEO slug hook (fix exists on staging, not yet deployed to production).
 
 ## License
 
