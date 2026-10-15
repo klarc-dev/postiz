@@ -63,8 +63,10 @@ ships playlist/caption support, drop the Klarc commits instead of rebasing them.
 
 ## Operations notes
 
-- After a Docker daemon restart, the orchestrator can start before Temporal and
-  keep running without workers (no pollers on the `main`/`youtube`/`wordpress`
+- The orchestrator now waits for Temporal before starting its workers
+  (`apps/orchestrator/src/wait-for-temporal.ts`, up to `TEMPORAL_WAIT_TIMEOUT_MS`,
+  default 5 min). Before that fix, after a Docker daemon restart, the orchestrator
+  could start before Temporal and keep running without workers (no pollers on the `main`/`youtube`/`wordpress`
   task queues, posts stuck in QUEUE). Check with
   `temporal task-queue describe --task-queue main` in the Temporal container;
   fix with `pm2 restart orchestrator` in the Postiz container. If pm2 then loops

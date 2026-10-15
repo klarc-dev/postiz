@@ -7,6 +7,7 @@ module.exports = {
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/youtube.provider.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/dtos/posts/providers-settings/youtube.settings.dto.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/wordpress.provider.spec.ts',
+    '<rootDir>/apps/orchestrator/src/wait-for-temporal.spec.ts',
   ],
   transform: {
     '^.+\\.ts$': [
@@ -27,5 +28,6 @@ module.exports = {
     '^@gitroom/nestjs-libraries/(.*)$': '<rootDir>/libraries/nestjs-libraries/src/$1',
     '^@gitroom/helpers/(.*)$': '<rootDir>/libraries/helpers/src/$1',
     '^@gitroom/plugins/(.*)$': '<rootDir>/libraries/plugins/src/$1',
+    '^@gitroom/orchestrator/(.*)$': '<rootDir>/apps/orchestrator/src/$1',
   },
 };
