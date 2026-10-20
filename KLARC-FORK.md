@@ -38,6 +38,25 @@ the two `*.spec.ts` files next to them, run by `jest.klarc.config.js`.
   whole and re-validated in the provider before any media upload.
 - WordPress/Voxel rejections (`rest_invalid_param`, `rest_invalid_voxel_fields`,
   author errors…) fail the post with WordPress's own message.
+- `existing_post_id` explicitly updates an existing article in the selected REST
+  type. The editable target is read and its ID checked before uploading media.
+  Omitted `slug` and `status` are preserved on updates. Creating a new article
+  still defaults to publishing and generating a slug from the title.
+- Optional positive `parent` is sent as WordPress's native REST property, not a
+  Voxel custom field. The target type must expose this property. Never write
+  derived `hierarchy-*` fields to simulate a parent.
+- Cover `main_image.alt` is stored using the new attachment's `alt_text` before
+  the article is submitted. Malformed responses fail instead of returning an
+  undefined article ID. A later failure can still leave an uploaded attachment:
+  reconcile before retrying, and never blindly replay an uncertain create.
+- Shared safe article HTML preserves semantic tables, ordered lists, emphasis,
+  blockquotes and headings through validation and provider formatting. Scripts,
+  event handlers, styles and unsafe URL schemes remain disallowed.
+
+Run the patch tests with Node 22 using `pnpm exec jest -c jest.klarc.config.js`.
+Optionally set `POSTIZ_ARTICLE_CORPUS` to the prepared `articles-json` directory
+for real-corpus fidelity checks. Those tests exercise the API validation and
+HTML-provider formatting boundaries, not a live publication or browser preview.
 
 ## Staying up to date
 
@@ -72,8 +91,9 @@ ships playlist/caption support, drop the Klarc commits instead of rebasing them.
   fix with `pm2 restart orchestrator` in the Postiz container. If pm2 then loops
   on `EADDRINUSE :::3002`, an orphan orchestrator still holds the port: stop it
   (`kill -TERM <pid>` from `sh`) and pm2 recovers. Upstream behaviour, not the patch.
-- klarc.com: an explicit WordPress slug currently triggers a fatal error in the
-  Lean SEO slug hook (fix exists on staging, not yet deployed to production).
+- klarc.com: the earlier explicit-slug fatal in Lean SEO is fixed in the live
+  runtime, confirmed on 20 October 2026 by its nullable `?int` hook parameter.
+  Still verify the canonical URL after every publish or update.
 
 ## License
 

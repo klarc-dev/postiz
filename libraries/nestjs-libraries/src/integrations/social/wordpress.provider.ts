@@ -27,9 +27,10 @@ const WORDPRESS_USER_AGENT = 'Postiz/1.0 (+https://postiz.com)';
 /**
  * The exact JSON body sent to `POST /wp-json/wp/v2/<type>`, built from an
  * allowlist so no other setting can reach WordPress. Precedence:
- * - title, content, status, categories, tags and featured media as upstream;
- * - slug: the explicit `slug` setting wins over the slug generated from title;
- * - excerpt, author and voxel_fields are only sent when the setting is present,
+ * - title, content, categories, tags and featured media as upstream;
+ * - status defaults to publish on create, omitted on update unless supplied;
+ * - slug: explicit wins, generated on create and omitted on update otherwise;
+ * - excerpt, author, parent and voxel_fields are only sent when present,
  *   so an omitted value never clears what WordPress already stores.
  * voxel_fields is re-validated here (defence in depth) and sent whole, never
  * merged: the receiving Voxel adapter validates every field again.
@@ -40,9 +41,42 @@ export function buildWordpressPostBody(
   mediaId?: string | number
 ) {
   const numbers = (values?: number[]) =>
-    (values || []).map((value) => Number(value)).filter((value) => !isNaN(value));
+    (values || [])
+      .map((value) => Number(value))
+      .filter((value) => !isNaN(value));
   const categories = numbers(settings?.categories);
   const tags = numbers(settings?.tags);
+
+  for (const key of ['existing_post_id', 'parent'] as const) {
+    if (
+      settings?.[key] !== undefined &&
+      !(Number.isSafeInteger(settings[key]) && settings[key] > 0)
+    ) {
+      throw new BadBody(
+        'wordpress',
+        '{}',
+        '{}',
+        `${key} must be a positive WordPress post id`
+      );
+    }
+  }
+  if (
+    typeof settings?.type !== 'string' ||
+    !/^[a-z0-9_-]+$/i.test(settings.type)
+  ) {
+    throw new BadBody('wordpress', '{}', '{}', 'type must be a REST base');
+  }
+  if (
+    settings?.main_image?.alt !== undefined &&
+    typeof settings.main_image.alt !== 'string'
+  ) {
+    throw new BadBody(
+      'wordpress',
+      '{}',
+      '{}',
+      'main_image.alt must be a string'
+    );
+  }
 
   if (settings?.voxel_fields !== undefined) {
     const problem = voxelFieldsProblem(settings.voxel_fields);
@@ -54,21 +88,38 @@ export function buildWordpressPostBody(
     settings?.author !== undefined &&
     !(Number.isInteger(settings.author) && settings.author > 0)
   ) {
-    throw new BadBody('wordpress', '{}', '{}', 'author must be a WordPress user id');
+    throw new BadBody(
+      'wordpress',
+      '{}',
+      '{}',
+      'author must be a WordPress user id'
+    );
   }
 
   return {
     title: settings?.title,
     content,
-    slug:
-      settings?.slug ||
-      slugify(settings?.title || '', { lower: true, strict: true, trim: true }),
-    status: settings?.status || 'publish',
+    ...(settings?.existing_post_id !== undefined && settings?.slug === undefined
+      ? {}
+      : {
+          slug:
+            settings?.slug ||
+            slugify(settings?.title || '', {
+              lower: true,
+              strict: true,
+              trim: true,
+            }),
+        }),
+    ...(settings?.existing_post_id !== undefined &&
+    settings?.status === undefined
+      ? {}
+      : { status: settings?.status || 'publish' }),
     ...(categories.length ? { categories } : {}),
     ...(tags.length ? { tags } : {}),
     ...(mediaId ? { featured_media: mediaId } : {}),
     ...(settings?.excerpt !== undefined ? { excerpt: settings.excerpt } : {}),
     ...(settings?.author !== undefined ? { author: settings.author } : {}),
+    ...(settings?.parent !== undefined ? { parent: settings.parent } : {}),
     ...(settings?.voxel_fields !== undefined
       ? { voxel_fields: settings.voxel_fields }
       : {}),
@@ -89,13 +140,18 @@ export function wordpressErrorMessage(body: string): string | undefined {
       : '';
     const details = [
       ...(fatal ? [fatal] : []),
-      ...Object.entries<any>(json.data?.params || {}).map(([key, value]) => `${key}: ${value}`),
+      ...Object.entries<any>(json.data?.params || {}).map(
+        ([key, value]) => `${key}: ${value}`
+      ),
       ...(Array.isArray(json.data?.errors)
         ? json.data.errors.map((error: any) =>
-            typeof error === 'string' ? error : error?.message || JSON.stringify(error)
+            typeof error === 'string'
+              ? error
+              : error?.message || JSON.stringify(error)
           )
         : Object.entries<any>(json.data?.errors || {}).map(
-            ([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`
+            ([key, value]) =>
+              `${key}: ${Array.isArray(value) ? value.join(', ') : value}`
           )),
     ];
     return `WordPress rejected the post (${json.code}): ${json.message || ''}${
@@ -149,7 +205,8 @@ export class WordpressProvider
     };
   }
   override handleErrors(
-    body: string
+    body: string,
+    status?: number
   ):
     | { type: 'refresh-token' | 'bad-body' | 'retry'; value: string }
     | undefined {
@@ -160,7 +217,7 @@ export class WordpressProvider
       };
     }
     if (
-      /rest_invalid_param|rest_invalid_voxel_fields|rest_cannot_edit_others|rest_invalid_author|rest_post_exists|rest_invalid_content_envelope|internal_server_error/.test(
+      /rest_invalid_param|rest_invalid_voxel_fields|rest_cannot_edit|rest_cannot_read|rest_post_invalid_id|rest_invalid_post_id|rest_invalid_author|rest_post_exists|rest_invalid_content_envelope|internal_server_error/.test(
         body
       )
     ) {
@@ -169,7 +226,60 @@ export class WordpressProvider
         value: wordpressErrorMessage(body) || 'WordPress rejected the post',
       };
     }
+    if (status && [400, 401, 403, 404].includes(status)) {
+      return {
+        type: 'bad-body',
+        value:
+          wordpressErrorMessage(body) ||
+          `WordPress request failed (HTTP ${status}). Check the target post, REST type and connected user permissions.`,
+      };
+    }
     return undefined;
+  }
+
+  private async postResponse(
+    response: Response,
+    operation: string,
+    expectedId?: number,
+    requireLink = false
+  ) {
+    const raw = await response.text();
+    let result: any;
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        `WordPress ${operation} returned invalid JSON`
+      );
+    }
+    if (!response.ok || result?.code) {
+      throw new BadBody(
+        this.identifier,
+        raw,
+        '{}',
+        wordpressErrorMessage(raw) ||
+          `WordPress ${operation} failed (HTTP ${response.status})`
+      );
+    }
+    if (
+      !Number.isSafeInteger(result?.id) ||
+      result.id <= 0 ||
+      (expectedId !== undefined && result.id !== expectedId) ||
+      (requireLink &&
+        (typeof result.link !== 'string' ||
+          !/^https?:\/\/\S+$/i.test(result.link)))
+    ) {
+      throw new BadBody(
+        this.identifier,
+        raw,
+        '{}',
+        `WordPress ${operation} returned an invalid post or media response`
+      );
+    }
+    return result;
   }
 
   async customFields() {
@@ -414,7 +524,12 @@ export class WordpressProvider
   async voxelFieldsSample(token: string, data: { type?: string }) {
     const type = String(data?.type || 'posts');
     if (!/^[a-z0-9_-]+$/i.test(type)) {
-      throw new BadBody(this.identifier, '{}', '{}', 'type must be a REST base');
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'type must be a REST base'
+      );
     }
     const posts = await this.wpGet(
       token,
@@ -446,41 +561,97 @@ export class WordpressProvider
     );
 
     // Validate before any upload, so a rejected post leaves no orphan media.
-    buildWordpressPostBody(postDetails?.[0]?.settings, postDetails?.[0]?.message);
+    buildWordpressPostBody(
+      postDetails?.[0]?.settings,
+      postDetails?.[0]?.message
+    );
 
-    let mediaId = '';
+    const settings = postDetails[0].settings;
+    const existingId = settings.existing_post_id;
+    const postUrl = `${body.domain}/wp-json/wp/v2/${settings.type}${
+      existingId !== undefined ? `/${existingId}` : ''
+    }`;
+    if (existingId !== undefined) {
+      // Check the editable target before uploading or changing any media.
+      await this.postResponse(
+        await this.fetch(
+          `${postUrl}?context=edit`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Basic ${auth}`,
+              'User-Agent': WORDPRESS_USER_AGENT,
+            },
+          },
+          this.identifier
+        ),
+        'update target read',
+        existingId
+      );
+    }
+
+    let mediaId: number | undefined;
     if (postDetails?.[0]?.settings?.main_image?.path) {
       console.log(
         'Uploading image to WordPress',
         postDetails[0].settings.main_image.path
       );
 
-      const blob = await this.fetch(
-        postDetails[0].settings.main_image.path
-      ).then((r) => r.blob());
+      const imageResponse = await this.fetch(settings.main_image.path);
+      if (!imageResponse.ok) {
+        throw new BadBody(
+          this.identifier,
+          '{}',
+          '{}',
+          'Could not read the WordPress main image'
+        );
+      }
+      const blob = await imageResponse.blob();
 
-      const mediaResponse = await (
-        await this.fetch(`${body.domain}/wp-json/wp/v2/media`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${auth}`,
-            'Content-Disposition': `attachment; filename="${postDetails[0].settings.main_image.path
-              .split('/')
-              .pop()}"`,
-            'Content-Type': blob.type,
-            'User-Agent': WORDPRESS_USER_AGENT,
+      const mediaResponse = await this.postResponse(
+        await this.fetch(
+          `${body.domain}/wp-json/wp/v2/media`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${auth}`,
+              'Content-Disposition': `attachment; filename="${postDetails[0].settings.main_image.path
+                .split('/')
+                .pop()}"`,
+              'Content-Type': blob.type,
+              'User-Agent': WORDPRESS_USER_AGENT,
+            },
+            body: blob,
           },
-          body: blob,
-        })
-      ).json();
+          this.identifier
+        ),
+        'media upload'
+      );
 
       mediaId = mediaResponse.id;
+      if (settings.main_image.alt !== undefined) {
+        await this.postResponse(
+          await this.fetch(
+            `${body.domain}/wp-json/wp/v2/media/${mediaId}`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Basic ${auth}`,
+                'Content-Type': 'application/json',
+                'User-Agent': WORDPRESS_USER_AGENT,
+              },
+              body: JSON.stringify({ alt_text: settings.main_image.alt }),
+            },
+            this.identifier
+          ),
+          'media metadata update',
+          mediaId
+        );
+      }
     }
-
-
-    const submit = await (
+    const submit = await this.postResponse(
       await this.fetch(
-        `${body.domain}/wp-json/wp/v2/${postDetails?.[0]?.settings?.type}`,
+        postUrl,
         {
           headers: {
             Authorization: `Basic ${auth}`,
@@ -495,9 +666,13 @@ export class WordpressProvider
               mediaId
             )
           ),
-        }
-      )
-    ).json();
+        },
+        this.identifier
+      ),
+      existingId !== undefined ? 'post update' : 'post create',
+      existingId,
+      true
+    );
 
     return [
       {

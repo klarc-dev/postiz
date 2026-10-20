@@ -7,11 +7,13 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
   registerDecorator,
   ValidateNested,
+  ValidateIf,
   ValidationOptions,
 } from 'class-validator';
 import { MediaDto } from '@gitroom/nestjs-libraries/dtos/media/media.dto';
@@ -47,7 +49,9 @@ export function voxelFieldsProblem(value: unknown): string | undefined {
       return undefined;
     }
     if (typeof node === 'number') {
-      return Number.isFinite(node) ? undefined : 'voxel_fields contains a non-finite number';
+      return Number.isFinite(node)
+        ? undefined
+        : 'voxel_fields contains a non-finite number';
     }
     if (Array.isArray(node)) {
       for (const item of node) {
@@ -92,7 +96,8 @@ function IsSafeVoxelFields(validationOptions?: ValidationOptions) {
       options: validationOptions,
       validator: {
         validate: (value: unknown) => voxelFieldsProblem(value) === undefined,
-        defaultMessage: (args) => voxelFieldsProblem(args?.value) || 'invalid voxel_fields',
+        defaultMessage: (args) =>
+          voxelFieldsProblem(args?.value) || 'invalid voxel_fields',
       },
     });
   };
@@ -111,7 +116,28 @@ export class WordpressDto {
 
   @IsString()
   @IsDefined()
+  @Matches(/^[a-z0-9_-]+$/i, { message: 'type must be a REST base' })
   type: string;
+
+  @ValidateIf((object, value) => value !== undefined)
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  @JSONSchema({
+    description:
+      'Explicit WordPress post id to update within the selected REST type. Omit to create a new post.',
+  })
+  existing_post_id?: number;
+
+  @ValidateIf((object, value) => value !== undefined)
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  @JSONSchema({
+    description:
+      'Native WordPress parent post id for hierarchical post types. Must be positive; omit to preserve the current parent.',
+  })
+  parent?: number;
 
   @IsOptional()
   @IsArray()
@@ -145,7 +171,7 @@ export class WordpressDto {
   })
   @JSONSchema({
     description:
-      'Explicit post slug. When present it replaces the slug Postiz otherwise generates from the title.',
+      'Explicit post slug. Replaces the generated slug on create. Omit on update to preserve the existing slug.',
   })
   slug?: string;
 
