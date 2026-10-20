@@ -20,6 +20,21 @@ Checked 20 October 2026. This is a local release plan, not evidence of deploymen
 - No browser preview, real article write, image upload or production acceptance was performed.
 - A broader non-build backend tsconfig check reports seven unrelated implicit-any errors. The actual production build configurations pass.
 
+## Requirement traceability and real acceptance boundary
+
+| Requirement / changed output | Concrete observed check | Evidence limit |
+| --- | --- | --- |
+| Update existing pillar rather than duplicate | `WordPress publishing requests` tests read the editable target then POST the same ID endpoint; mismatched IDs and failed reads reject before upload | Mocked HTTP responses, no real article update |
+| Preserve existing slug and draft/private status | Named tests omit update slug and test both draft/private targets with no outgoing status; explicit publish is separately tested | Request contract verified, remote persistence untested |
+| Retain native parent and Voxel structure | Request-body test forwards explicit parent and Voxel object; production WordPress OPTIONS exposes native parent integer | No parent write performed |
+| Save cover alternative text | Named metadata tests check string and empty alt, omitted alt, mismatched media ID and metadata failure before submission | Mocked media requests, no real attachment uploaded |
+| Preserve all 13 article bodies | Corpus test runs each complete original body through both real Nest ValidationPipe configurations and outbound `stripHtmlValidation('html')`, comparing canonical DOM | Local real functions, not queued Temporal execution or browser rendering |
+| Do not introduce active HTML or entity-based injection | Named hostile HTML/entity tests reparse outbound content and reject scripts/events/unsafe URLs; normal/none/markdown regressions ensure new tags do not leak | Local security regression checks, no browser exploit suite |
+| Keep existing integrations compatible | Existing YouTube and Temporal suites pass, production backend/orchestrator TypeScript configurations pass | No running workers restarted or exercised |
+| Deploy connector and publish 13 articles | Real authenticated `postiz integrations:settings cmv8ayyez000hud9f24hzcs51` was exercised again after commits | **Blocked**: live schema reports `existing_post_id` absent, `parent` absent, `voxel_fields` present. The candidate is not deployed. No content write attempted because deployment approval and route/author decisions remain unresolved |
+
+The local implementation is demonstrably better at the tested boundaries: it preserves the actual article DOM and expresses update/parent/alt requests that the original implementation could not. It is not evidence that the live service now satisfies publication requirements. The real authenticated interface confirms that it does not yet expose these fixes. Live acceptance must remain open until an approved rollout and controlled publication are observed.
+
 ## Existing runtime and rollback identity
 
 Read-only Docker inspection verified the running application version is `klarc-v2.25.1-f4b7376e`, matching the original local checkout.
