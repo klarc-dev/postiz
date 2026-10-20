@@ -8,13 +8,15 @@ module.exports = {
     '<rootDir>/libraries/nestjs-libraries/src/dtos/posts/providers-settings/youtube.settings.dto.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/wordpress.provider.spec.ts',
     '<rootDir>/apps/orchestrator/src/wait-for-temporal.spec.ts',
+    '<rootDir>/libraries/helpers/src/utils/sanitize.post.content.spec.ts',
   ],
   transform: {
-    '^.+\\.ts$': [
+    '^.+\\.(?:[jt]s|mjs)$': [
       'ts-jest',
       {
         isolatedModules: true,
         tsconfig: {
+          allowJs: true,
           experimentalDecorators: true,
           emitDecoratorMetadata: true,
           esModuleInterop: true,
@@ -24,6 +26,11 @@ module.exports = {
       },
     ],
   },
+  // DOMPurify's server-side jsdom dependencies include ESM, also on Node 22.
+  // Transform only this dependency chain rather than all of node_modules.
+  transformIgnorePatterns: [
+    'node_modules/(?!(?:@exodus/bytes|isomorphic-dompurify|parse5|entities|@asamuzakjp|@csstools)/)',
+  ],
   moduleNameMapper: {
     '^@gitroom/nestjs-libraries/(.*)$': '<rootDir>/libraries/nestjs-libraries/src/$1',
     '^@gitroom/helpers/(.*)$': '<rootDir>/libraries/helpers/src/$1',

@@ -1,5 +1,6 @@
 import striptags from 'striptags';
 import { parseFragment, serialize } from 'parse5';
+import { sanitizePostContent } from './sanitize.post.content';
 
 const bold = {
   a: '𝗮',
@@ -157,30 +158,42 @@ export const stripHtmlValidation = (
   }
 
   if (type === 'html') {
-    return striptags(
-      convertMention(
-        inlineImages ? convertImages(value) : value,
-        convertMentionFunction
-      ),
-      [
-      'ul',
-      'li',
-      'h1',
-      'h2',
-      'h3',
-      'p',
-      'strong',
-      'u',
-      'a',
-      ...(inlineImages ? ['img'] : []),
-      ]
-    )
-      .replace(/&gt;/gi, '>')
-      .replace(/&lt;/gi, '<')
-      .replace(/&amp;/gi, '&')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'");
+    // Keep HTML entities encoded: decoding them after filtering can turn text
+    // (or quoted attribute values) back into executable markup.
+    return sanitizePostContent(
+      striptags(
+        convertMention(
+          inlineImages ? convertImages(value) : value,
+          convertMentionFunction
+        ),
+        [
+          'ul',
+          'li',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'h5',
+          'h6',
+          'blockquote',
+          'ol',
+          'em',
+          'table',
+          'caption',
+          'thead',
+          'tbody',
+          'tfoot',
+          'tr',
+          'th',
+          'td',
+          'p',
+          'strong',
+          'u',
+          'a',
+          ...(inlineImages ? ['img'] : []),
+        ]
+      )
+    );
   }
 
   if (type === 'markdown') {
@@ -225,7 +238,7 @@ export const stripHtmlValidation = (
       .replace(/&lt;/gi, '<');
   }
 
-  if (!/<p[\s>]/i.test(value) && !none) {
+  if (!/<(?:p|h[4-6]|blockquote|ol|em|table|caption|thead|tbody|tfoot|tr|th|td)[\s>]/i.test(value) && !none) {
     return value;
   }
 
