@@ -1,0 +1,418 @@
+{
+  "calendar": {
+    "articles": 13,
+    "failed": 1
+  },
+  "publishedList": {
+    "total": 13,
+    "count": 13,
+    "hasMore": false
+  },
+  "articles": [
+    {
+      "target": "2164",
+      "source": "cmvhzvbdd000sud8wgwqqs251",
+      "title": "Brevetabilité d'une invention : critères, exclusions et méthode d'analyse",
+      "anchor": "2026-10-21T09:38:59.000Z",
+      "history": [
+        {
+          "id": "cmvhzvbdd000sud8wgwqqs251",
+          "group": "8526206a-e51b-4af0-9628-44274a406115",
+          "publishDate": "2026-10-21T10:53:54.813Z",
+          "createdAt": "2026-10-21T10:53:55.154Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyjqr7000eud8wn55av8vl",
+          "group": "9a1fac17-592c-4316-92b3-39ad279f67bd",
+          "publishDate": "2026-10-21T10:16:55.301Z",
+          "createdAt": "2026-10-21T10:16:55.604Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyg4rd0001ud8w3fxhc9yu",
+          "group": "2346b8ae-e0af-4688-8e49-a2560265209c",
+          "publishDate": "2026-10-21T10:14:06.664Z",
+          "createdAt": "2026-10-21T10:14:07.129Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhxnxmv0000ud9o92mzgv93",
+          "group": "846629c2-526a-4131-aa09-b11d0144cb60",
+          "publishDate": "2026-10-21T09:52:11.065Z",
+          "createdAt": "2026-10-21T09:52:11.527Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhx6yvt0000ud986chgb2jt",
+          "group": "1c4483f3-df80-49bf-bec0-23b41f5b377d",
+          "publishDate": "2026-10-21T09:38:59.000Z",
+          "createdAt": "2026-10-21T09:38:59.993Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97551",
+      "source": "cmvhzvf6j000tud8wqmuvxxux",
+      "title": "Nouveauté d'un brevet : le test de la divulgation antérieure unique",
+      "anchor": "2026-10-21T10:14:15.150Z",
+      "history": [
+        {
+          "id": "cmvhzvf6j000tud8wqmuvxxux",
+          "group": "94a0cfd0-1e09-4078-a7f7-63a301347d7a",
+          "publishDate": "2026-10-21T10:53:59.659Z",
+          "createdAt": "2026-10-21T10:54:00.091Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyju94000fud8wylr987ni",
+          "group": "02fcf2dd-2849-4a91-b3d1-c35cd43fe9a4",
+          "publishDate": "2026-10-21T10:16:59.853Z",
+          "createdAt": "2026-10-21T10:17:00.136Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhygb550002ud8wx4leznad",
+          "group": "ba5fd646-22f9-48d1-8e35-cea88aa7493f",
+          "publishDate": "2026-10-21T10:14:15.150Z",
+          "createdAt": "2026-10-21T10:14:15.402Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97553",
+      "source": "cmvhzvlpx000uud8wv6gsnt7a",
+      "title": "Activité inventive : appliquer la méthode problème-solution sans raisonnement rétrospectif",
+      "anchor": "2026-10-21T10:14:24.330Z",
+      "history": [
+        {
+          "id": "cmvhzvlpx000uud8wv6gsnt7a",
+          "group": "9197328d-902a-4283-a483-595752fc09f1",
+          "publishDate": "2026-10-21T10:54:08.148Z",
+          "createdAt": "2026-10-21T10:54:08.565Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyjxwt000gud8wdtmawfpd",
+          "group": "8c436c24-8533-4572-b5d2-49ac4ce7532d",
+          "publishDate": "2026-10-21T10:17:04.521Z",
+          "createdAt": "2026-10-21T10:17:04.877Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhygiaw0003ud8wepmth5m3",
+          "group": "cdf0f60c-b10f-4111-9f7c-e12373e2c246",
+          "publishDate": "2026-10-21T10:14:24.330Z",
+          "createdAt": "2026-10-21T10:14:24.680Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97555",
+      "source": "cmvhzvpgs000vud8wixnsykta",
+      "title": "Application industrielle et caractère technique : quand une idée devient-elle une invention ?",
+      "anchor": "2026-10-21T10:14:36.122Z",
+      "history": [
+        {
+          "id": "cmvhzvpgs000vud8wixnsykta",
+          "group": "7cb618a9-ad88-4766-a1ff-1335d0bf5e7c",
+          "publishDate": "2026-10-21T10:54:13.158Z",
+          "createdAt": "2026-10-21T10:54:13.420Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyk1jf000hud8wrzjvri3r",
+          "group": "4f83b80e-828c-468b-abb4-27451a75b64a",
+          "publishDate": "2026-10-21T10:17:09.329Z",
+          "createdAt": "2026-10-21T10:17:09.579Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhygrc30004ud8w1w1l4cxr",
+          "group": "16fc9fa1-8721-4b86-b335-f4d1f66c629c",
+          "publishDate": "2026-10-21T10:14:36.122Z",
+          "createdAt": "2026-10-21T10:14:36.388Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97557",
+      "source": "cmvhzvt5c000wud8wotzje7wu",
+      "title": "Inventions non brevetables : cartographie des exclusions en France et à l'OEB",
+      "anchor": "2026-10-21T10:14:48.659Z",
+      "history": [
+        {
+          "id": "cmvhzvt5c000wud8wotzje7wu",
+          "group": "fad0a291-98e9-49df-b047-1100d525d806",
+          "publishDate": "2026-10-21T10:54:17.940Z",
+          "createdAt": "2026-10-21T10:54:18.192Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyk57m000iud8w9by2nvee",
+          "group": "85e70383-02bc-4e17-9fb1-7435c9f54c32",
+          "publishDate": "2026-10-21T10:17:14.087Z",
+          "createdAt": "2026-10-21T10:17:14.339Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyh1170005ud8wqnuukl5n",
+          "group": "8f01e00e-9eb8-4fbf-9290-63cf606ac197",
+          "publishDate": "2026-10-21T10:14:48.659Z",
+          "createdAt": "2026-10-21T10:14:48.956Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97559",
+      "source": "cmvhzvzdm000xud8wq1gfz2rq",
+      "title": "Méthodes médicales et diagnostic : ce qui peut encore être breveté",
+      "anchor": "2026-10-21T10:15:00.963Z",
+      "history": [
+        {
+          "id": "cmvhzvzdm000xud8wq1gfz2rq",
+          "group": "68f2160c-aca0-4652-8b5a-3941e679b1b2",
+          "publishDate": "2026-10-21T10:54:25.929Z",
+          "createdAt": "2026-10-21T10:54:26.266Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyk8t9000jud8w49xcj35n",
+          "group": "7ea4ff41-c552-4a18-ab13-a3b18ddd5a09",
+          "publishDate": "2026-10-21T10:17:18.675Z",
+          "createdAt": "2026-10-21T10:17:19.005Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyhaik0006ud8wveq3upq5",
+          "group": "c1ab257c-2b4b-44e0-99c0-c92d3e47decc",
+          "publishDate": "2026-10-21T10:15:00.963Z",
+          "createdAt": "2026-10-21T10:15:01.245Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97561",
+      "source": "cmvhzw305000yud8w5chv2bqa",
+      "title": "Brevet et biotechnologie : matière biologique, gènes, végétaux et exclusions",
+      "anchor": "2026-10-21T10:15:13.445Z",
+      "history": [
+        {
+          "id": "cmvhzw305000yud8w5chv2bqa",
+          "group": "6a55a646-c503-468a-9dda-c1a014c8485b",
+          "publishDate": "2026-10-21T10:54:30.707Z",
+          "createdAt": "2026-10-21T10:54:30.965Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykcgd000kud8wnfal7qj3",
+          "group": "d54d1951-630b-4901-9063-1730ebf489b2",
+          "publishDate": "2026-10-21T10:17:23.402Z",
+          "createdAt": "2026-10-21T10:17:23.725Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyhk7b0007ud8w11qysdw9",
+          "group": "4fa1d104-ec88-4ecf-a47b-3abf680ef548",
+          "publishDate": "2026-10-21T10:15:13.445Z",
+          "createdAt": "2026-10-21T10:15:13.800Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97563",
+      "source": "cmvhzw6sj000zud8w4o7zt1iv",
+      "title": "Brevet logiciel : démontrer l'effet technique supplémentaire",
+      "anchor": "2026-10-21T10:15:29.233Z",
+      "history": [
+        {
+          "id": "cmvhzw6sj000zud8w4o7zt1iv",
+          "group": "b691e9d2-8291-4a04-8320-2343a3088db8",
+          "publishDate": "2026-10-21T10:54:35.612Z",
+          "createdAt": "2026-10-21T10:54:35.875Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykg3l000lud8wtgmgbofd",
+          "group": "0fdec3f5-6354-4661-a8c7-8c1825dbab86",
+          "publishDate": "2026-10-21T10:17:28.103Z",
+          "createdAt": "2026-10-21T10:17:28.449Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyhwbz0008ud8wz4ga0z5f",
+          "group": "967c99f8-f7e8-47da-8554-fddbe940af3a",
+          "publishDate": "2026-10-21T10:15:29.233Z",
+          "createdAt": "2026-10-21T10:15:29.520Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97565",
+      "source": "cmvhzwd8j0010ud8wks4iwf0y",
+      "title": "Algorithmes et méthodes mathématiques : à quelles conditions sont-ils brevetables ?",
+      "anchor": "2026-10-21T10:15:38.924Z",
+      "history": [
+        {
+          "id": "cmvhzwd8j0010ud8wks4iwf0y",
+          "group": "babf2698-d8c3-4f62-af1b-da7d695f1381",
+          "publishDate": "2026-10-21T10:54:43.969Z",
+          "createdAt": "2026-10-21T10:54:44.227Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykjpl000mud8wh1dlbxm5",
+          "group": "0b40a271-d97e-4d5f-acea-efaa28845791",
+          "publishDate": "2026-10-21T10:17:32.787Z",
+          "createdAt": "2026-10-21T10:17:33.130Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyi3ta0009ud8wuo05yq28",
+          "group": "1e9f6f61-abe0-4feb-b81f-7d8970019a07",
+          "publishDate": "2026-10-21T10:15:38.924Z",
+          "createdAt": "2026-10-21T10:15:39.214Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97567",
+      "source": "cmvhzwgzg0011ud8wrodk4gbq",
+      "title": "Invention mise en œuvre par ordinateur : rédiger autour d'une contribution technique",
+      "anchor": "2026-10-21T10:15:51.532Z",
+      "history": [
+        {
+          "id": "cmvhzwgzg0011ud8wrodk4gbq",
+          "group": "f4ba04ac-6569-43db-8040-dbe7f6a93b06",
+          "publishDate": "2026-10-21T10:54:48.818Z",
+          "createdAt": "2026-10-21T10:54:49.084Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykndu000nud8w9ra5xae7",
+          "group": "f9ecf288-76cf-4b47-92bd-2b4440f76964",
+          "publishDate": "2026-10-21T10:17:37.616Z",
+          "createdAt": "2026-10-21T10:17:37.891Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyidjc000aud8wb2rb674n",
+          "group": "3c7efafa-4f46-418a-a26d-dcb21bbcaa01",
+          "publishDate": "2026-10-21T10:15:51.532Z",
+          "createdAt": "2026-10-21T10:15:51.816Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97569",
+      "source": "cmvhzwncy0012ud8w0rgansw9",
+      "title": "Recherche d'antériorités : méthode, périmètre et limites avant le dépôt",
+      "anchor": "2026-10-21T10:16:04.358Z",
+      "history": [
+        {
+          "id": "cmvhzwncy0012ud8w0rgansw9",
+          "group": "3f33ae27-979a-4c74-b3db-d2c12d87e6c2",
+          "publishDate": "2026-10-21T10:54:57.070Z",
+          "createdAt": "2026-10-21T10:54:57.346Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykr1x000oud8wpp6u2lad",
+          "group": "05a84d99-e5ec-400e-a9a7-16527ec65a2f",
+          "publishDate": "2026-10-21T10:17:42.332Z",
+          "createdAt": "2026-10-21T10:17:42.645Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyinhy000bud8wrw8kspka",
+          "group": "679fdd79-417b-4ad3-9500-9cd4738c9638",
+          "publishDate": "2026-10-21T10:16:04.358Z",
+          "createdAt": "2026-10-21T10:16:04.727Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97571",
+      "source": "cmvi2xilx0000ud86tbddn19a",
+      "title": "Suffisance de description : permettre à l'homme du métier d'exécuter l'invention",
+      "anchor": "2026-10-21T10:16:20.312Z",
+      "history": [
+        {
+          "id": "cmvi2xilx0000ud86tbddn19a",
+          "group": "569f32b2-462c-437a-af67-f327e4303d44",
+          "publishDate": "2026-10-21T12:19:36.143Z",
+          "createdAt": "2026-10-21T12:19:36.694Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhzwr4u0013ud8w4uw9cg0i",
+          "group": "babf8e4f-2d50-4c01-81e4-4b1aef205d57",
+          "publishDate": "2026-10-21T10:55:01.959Z",
+          "createdAt": "2026-10-21T10:55:02.239Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykuo5000pud8w3qw340a9",
+          "group": "0ef1f624-c4ac-4ca2-9858-16776a85baa9",
+          "publishDate": "2026-10-21T10:17:47.027Z",
+          "createdAt": "2026-10-21T10:17:47.333Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyizqa000cud8wqn4q15v3",
+          "group": "f26d11a4-3604-43e7-ab2b-52e0aa1f7f68",
+          "publishDate": "2026-10-21T10:16:20.312Z",
+          "createdAt": "2026-10-21T10:16:20.578Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    },
+    {
+      "target": "97573",
+      "source": "cmvi2xmuq0001ud86ormtyfp5",
+      "title": "Unité d'invention : identifier le concept inventif général d'une demande",
+      "anchor": "2026-10-21T10:16:29.619Z",
+      "history": [
+        {
+          "id": "cmvi2xmuq0001ud86ormtyfp5",
+          "group": "e38f0e49-2912-4ca5-bc9e-61441aa2269e",
+          "publishDate": "2026-10-21T12:19:41.905Z",
+          "createdAt": "2026-10-21T12:19:42.194Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhzwxj20014ud8wf9tp7lcb",
+          "group": "986ba9fc-6a72-4844-b80b-0766297fab96",
+          "publishDate": "2026-10-21T10:55:10.289Z",
+          "createdAt": "2026-10-21T10:55:10.527Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhykyaz000qud8wkcu33znp",
+          "group": "e4f6cbd1-dbbd-402e-8ab7-f273b6e3ffd5",
+          "publishDate": "2026-10-21T10:17:51.698Z",
+          "createdAt": "2026-10-21T10:17:52.044Z",
+          "state": "PUBLISHED"
+        },
+        {
+          "id": "cmvhyj6wo000dud8w23nptr0h",
+          "group": "9baa004a-7bad-4fef-afee-820bd8576879",
+          "publishDate": "2026-10-21T10:16:29.619Z",
+          "createdAt": "2026-10-21T10:16:29.880Z",
+          "state": "PUBLISHED"
+        }
+      ]
+    }
+  ]
+}
