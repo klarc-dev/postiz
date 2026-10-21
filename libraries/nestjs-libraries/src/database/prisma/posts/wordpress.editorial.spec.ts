@@ -2,6 +2,11 @@ jest.mock('@gitroom/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaRepository: class {},
   PrismaService: class {},
 }));
+// CI intentionally installs with --ignore-scripts, so Prisma is not generated.
+// These repository-boundary unit tests stub persistence, including its enums.
+jest.mock('@prisma/client', () => ({
+  State: { PUBLISHED: 'PUBLISHED', ERROR: 'ERROR', QUEUE: 'QUEUE', DRAFT: 'DRAFT' },
+}));
 import { projectWordpressEditorial } from './wordpress.editorial';
 import { PostsRepository } from './posts.repository';
 
