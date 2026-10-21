@@ -53,7 +53,11 @@ Using the existing authorized public API key after verifying the running version
 
 The existing Firefox session is authenticated to a Klarc organization with no channels. Its only selectable organization also has no channels. An isolated Chrome session using the existing configured account through normal login succeeded with HTTP 200, but its integration list is also empty. No account, membership or password was changed and no user token was minted.
 
-Consequently, production editor-button visibility/click/confirmation on the intended WordPress channel could not be exercised through these legitimate browser sessions. The button and payload are source/typecheck/helper-tested, the deployed frontend version is browser-observed, and the actual deployed stale-source rejection is acceptance-tested. This is **not** evidence of a successful MAJ button-driven WordPress write, nor of a live concurrent-request/pending-target stress test. A legitimate browser session with access to the existing WordPress channel is required to close that final UI acceptance boundary.
+At that initial rollout checkpoint, production editor-button visibility/click/confirmation on the intended channel could not be exercised through those Firefox/Chrome sessions.
+
+**Follow-up at 12:09 UTC:** the legitimate ego-browser session exposed all 17 integrations, including the existing WordPress channel `cmv8ayyez000hud9f24hzcs51`. Opening a published pillar delivery rendered **MAJ WordPress #2164** and **Save this channel in Postiz**. Clicking MAJ opened the explicit single-article replacement confirmation. Clicking **No, cancel!** closed it successfully, without submitting an update. Evidence is committed in the articles repository at `7039dc9`, under `cluster-brevetabilite/editorial-revision/ego-ui/confirmation.png` and `confirmation.txt`. The browser-access blocker is therefore resolved for that session.
+
+This verifies the actual rendered button → confirmation → cancellation path, **not** a successful new MAJ button-driven WordPress write or live concurrent-request stress test. No old history was intentionally replayed into the already revised pages. The actual deployed stale-source rejection remains separately acceptance-tested.
 
 ## Rollback and residual risks
 
