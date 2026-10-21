@@ -336,7 +336,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       if (
         remoteUpdate &&
         !(await deleteDialog(
-          `MAJ WordPress #${wordpressTarget}: update only this channel now? The existing URL, status and author are preserved.`,
+          `MAJ WordPress #${wordpressTarget}: replace this remote article with the content in this editor now? Use the latest completed delivery, older history may contain older content. Only this channel is sent. The existing URL, status and author are preserved.`,
           'MAJ'
         ))
       )
