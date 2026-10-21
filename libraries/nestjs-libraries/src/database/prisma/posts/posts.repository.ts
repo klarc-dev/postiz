@@ -1,5 +1,6 @@
 import { PrismaRepository, PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { assertWordpressUpdateCurrent } from './wordpress.update.guard';
+import { projectWordpressEditorial } from './wordpress.editorial';
 import { Injectable } from '@nestjs/common';
 import { Post as PostBody } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
 import {
@@ -173,7 +174,11 @@ export class PostsRepository {
     }
   }
 
-  async getPosts(orgId: string, query: GetPostsDto) {
+  getCalendarPosts(orgId: string, query: GetPostsDto) {
+    return this.getPosts(orgId, query, true);
+  }
+
+  async getPosts(orgId: string, query: GetPostsDto, editorial = false) {
     // Use the provided start and end dates directly
     const startDate = dayjs.utc(query.startDate).toDate();
     const endDate = dayjs.utc(query.endDate).toDate();
@@ -201,6 +206,9 @@ export class PostsRepository {
                   not: null,
                 },
               },
+              // Load successful WordPress history globally, not just the visible
+              // range. Its newest source and original date may be in other months.
+              ...(editorial ? [{ state: State.PUBLISHED, integration: { providerIdentifier: 'wordpress' } }] : []),
             ],
           },
         ],
@@ -224,6 +232,7 @@ export class PostsRepository {
         group: true,
         creationMethod: true,
         settings: true,
+        ...(editorial ? { createdAt: true, organizationId: true } : {}),
         tags: {
           where: {
             tag: {
@@ -245,7 +254,12 @@ export class PostsRepository {
       },
     });
 
-    return list
+    const visible = editorial
+      ? projectWordpressEditorial(list as (typeof list[number] & { createdAt: Date; organizationId: string })[])
+          .filter((post) => post.intervalInDays || (post.publishDate >= startDate && post.publishDate <= endDate))
+          .map(({ createdAt: _createdAt, organizationId: _organizationId, ...post }) => post)
+      : list;
+    return visible
       .map((post) => ({ ...post, error: this.curatedError(post.error) }))
       .reduce((all, post) => {
       if (!post.intervalInDays) {
@@ -333,8 +347,7 @@ export class PostsRepository {
     const [posts, total] = await Promise.all([
       this._post.model.post.findMany({
         where,
-        skip,
-        take: limit,
+        ...(stateFilter === 'published' ? {} : { skip, take: limit }),
         orderBy: {
           publishDate: orderDirection,
         },
@@ -348,6 +361,7 @@ export class PostsRepository {
           intervalInDays: true,
           group: true,
           creationMethod: true,
+          ...(stateFilter === 'published' ? { settings: true, createdAt: true, organizationId: true } : {}),
           tags: {
             where: {
               tag: {
@@ -368,9 +382,22 @@ export class PostsRepository {
           },
         },
       }),
-      this._post.model.post.count({ where }),
+      stateFilter === 'published' ? Promise.resolve(0) : this._post.model.post.count({ where }),
     ]);
 
+    if (stateFilter === 'published') {
+      // Project before pagination so counts and page boundaries describe articles,
+      // while the raw public API continues to describe individual deliveries.
+      const articles = projectWordpressEditorial(posts as (typeof posts[number] & { settings: string; createdAt: Date; organizationId: string })[])
+        .sort((a, b) => b.publishDate.getTime() - a.publishDate.getTime() || a.id.localeCompare(b.id));
+      return {
+        posts: articles.slice(skip, skip + limit).map(({ settings: _settings, createdAt: _createdAt, organizationId: _organizationId, ...post }) => post),
+        total: articles.length,
+        page,
+        limit,
+        hasMore: skip + limit < articles.length,
+      };
+    }
     return {
       posts,
       total,

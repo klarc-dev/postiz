@@ -478,7 +478,7 @@ export class PostsService {
 
   async getPostsMinified(orgId: string, query: GetPostsDto) {
     return minifyPosts({
-      posts: await this._postRepository.getPosts(orgId, query),
+      posts: await this._postRepository.getCalendarPosts(orgId, query),
     });
   }
 
