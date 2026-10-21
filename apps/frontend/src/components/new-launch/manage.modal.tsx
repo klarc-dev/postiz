@@ -154,6 +154,15 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
   // the channel in view, or the one that was opened
   const channel =
     existingPosts.find((p) => p.integration === current) || existingData;
+  // Delete can include sibling channels, so protect the entire dialog when
+  // any channel contains published WordPress history, not just the active tab.
+  const preservesWordpressHistory = existingPosts.some(
+    (post) =>
+      post.posts?.[0]?.state === 'PUBLISHED' &&
+      (post.settings?.__type === 'wordpress' ||
+        integrations.find((item) => item.id === post.integration)?.identifier ===
+          'wordpress')
+  );
 
   useEffect(() => {
     if (hide) {
@@ -233,6 +242,16 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
   }, [activateExitButton, dummy]);
 
   const deletePost = useCallback(async () => {
+    if (preservesWordpressHistory) {
+      toaster.show(
+        t(
+          'wordpress_history_delete_protected',
+          'Published WordPress deliveries are retained as history. Deleting a version could restore an older editable source.'
+        ),
+        'warning'
+      );
+      return;
+    }
     setLoading(true);
     if (existingData.siblings?.length) {
       const groups = await new Promise<string[]>((resolve) => {
@@ -319,7 +338,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     mutate();
     modal.closeAll();
     return;
-  }, [existingData, mutate, modal, current, integrations]);
+  }, [existingData, mutate, modal, current, integrations, preservesWordpressHistory, toaster, t]);
 
   const wordpressIdentifier = integrations.find(
     (item) => item.id === channel.integration
@@ -1188,7 +1207,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
             )}
           </div>
           <div className="pe-[20px] flex items-center justify-end gap-[8px]">
-            {existingData?.integration && (
+            {existingData?.integration && !preservesWordpressHistory && (
               <button
                 onClick={deletePost}
                 className="cursor-pointer flex text-[#FF3F3F] gap-[8px] items-center text-[15px] font-[600]"
@@ -1363,7 +1382,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
               label={t('repeat_post', 'Repeat Post')}
               onClick={() => setMobileSheet('repeat')}
             />
-            {existingData?.integration && (
+            {existingData?.integration && !preservesWordpressHistory && (
               <div
                 onClick={deletePost}
                 className="flex items-center gap-[12px] py-[8px] cursor-pointer text-[#FF3F3F]"
