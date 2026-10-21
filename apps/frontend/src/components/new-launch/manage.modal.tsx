@@ -581,6 +581,8 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         const values = await ref.current.getAllValues();
         allValues = remoteUpdate
           ? [prepareWordpressUpdate(values, channel, wordpressIdentifier)]
+          : wordpressTarget && type === 'update'
+          ? values.filter((item: any) => item.id === channel.integration)
           : values;
       } catch (error) {
         toaster.show(
@@ -873,7 +875,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     };
 
   const scheduleLabel = wordpressTarget
-    ? 'Save Postiz details'
+    ? 'Save this channel in Postiz'
     : dummy
     ? t('create_output', 'Create output')
     : !existingData?.integration
