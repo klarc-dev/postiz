@@ -66,6 +66,12 @@ import { useShortlinkPreference } from '@gitroom/frontend/components/settings/sh
 import dayjs from 'dayjs';
 import { Button } from '@gitroom/react/form/button';
 import { useClickOutside } from '@mantine/hooks';
+import {
+  prepareWordpressUpdate,
+  wordpressUpdateTarget,
+} from './wordpress.update';
+
+type SaveAction = 'draft' | 'now' | 'schedule' | 'update' | 'wordpress-update';
 
 export const ManageModal: FC<AddEditModalProps> = (props) => {
   const t = useT();
@@ -73,6 +79,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
   const ref = useRef(null);
   const existingData = useExistingData();
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
   const toaster = useToaster();
   const modal = useModals();
   const [showSettings, setShowSettings] = useState(false);
@@ -314,20 +321,40 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     return;
   }, [existingData, mutate, modal, current, integrations]);
 
+  const wordpressIdentifier = integrations.find(
+    (item) => item.id === channel.integration
+  )?.identifier;
+  const wordpressTarget =
+    current === channel.integration
+      ? wordpressUpdateTarget(channel, wordpressIdentifier)
+      : undefined;
+
   const schedule = useCallback(
-    (type: 'draft' | 'now' | 'schedule' | 'update') => async () => {
+    (action: SaveAction) => async () => {
+      const remoteUpdate = action === 'wordpress-update';
+      const type = remoteUpdate ? 'now' : action;
+      if (
+        remoteUpdate &&
+        !(await deleteDialog(
+          `MAJ WordPress #${wordpressTarget}: update only this channel now? The existing URL, status and author are preserved.`,
+          'MAJ'
+        ))
+      )
+        return;
       let republish = false;
       // the channels saved as another type, the rest are saved as `type`
       const saveAs: Record<string, 'draft' | 'schedule' | 'update'> = {};
       const saveTypeOf = (id: string) => saveAs[id] || type;
       // the channels that already went out, or are going out right now
-      const published = existingPosts.filter(
+      const published = (remoteUpdate ? [] : existingPosts).filter(
         (p) =>
           p.posts?.[0]?.state === 'PUBLISHED' ||
           (p.posts?.[0]?.state === 'QUEUE' &&
             dayjs().isAfter((channelDates[p.integration] || date).utc()))
       );
-      const others = existingPosts.filter((p) => p !== channel);
+      const others = remoteUpdate
+        ? []
+        : existingPosts.filter((p) => p !== channel);
 
       // another channel whose date already passed would go out right away, it
       // only gets its details saved
@@ -549,12 +576,27 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       // Pull the local values to build the payload, but rely on the server
       // (`/posts/valid`) for the actual validation — checkValidity now lives
       // server-side so it can't be bypassed.
-      const allValues = await ref.current.getAllValues();
+      let allValues;
+      try {
+        const values = await ref.current.getAllValues();
+        allValues = remoteUpdate
+          ? [prepareWordpressUpdate(values, channel, wordpressIdentifier)]
+          : values;
+      } catch (error) {
+        toaster.show(
+          error instanceof Error
+            ? error.message
+            : 'Could not prepare WordPress MAJ',
+          'warning'
+        );
+        setLoading(false);
+        return;
+      }
 
       const integrationById = (id: string) =>
         selectedIntegrations.find((p) => p.integration.id === id);
 
-      const group = existingData.group || makeId(10);
+      const group = (!remoteUpdate && existingData.group) || makeId(10);
 
       const posts = allValues.map((post: any) => ({
         integration: {
@@ -562,7 +604,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         },
         // every channel of an existing post updates its own post
         group:
-          existingPosts.find((p) => p.integration === post.id)?.group || group,
+          (!remoteUpdate &&
+            existingPosts.find((p) => p.integration === post.id)?.group) ||
+          group,
         ...(channelDates[post.id]
           ? {
               date: channelDates[post.id].utc().format('YYYY-MM-DDTHH:mm:ss'),
@@ -667,7 +711,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
       let shortLink = false;
 
-      if (!dummy && shortlinkPreference !== 'NO') {
+      if (!dummy && !remoteUpdate && shortlinkPreference !== 'NO') {
         const shortLinkUrl = await (
           await fetch('/posts/should-shortlink', {
             method: 'POST',
@@ -704,7 +748,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       const data = {
         type,
         ...(republish ? { republish } : {}),
-        ...(repeater ? { inter: repeater } : {}),
+        ...(!remoteUpdate && repeater ? { inter: repeater } : {}),
         tags,
         shortLink,
         date: date.utc().format('YYYY-MM-DDTHH:mm:ss'),
@@ -774,7 +818,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         if (!addEditSets) {
           mutate();
           toaster.show(
-            !existingData.integration
+            remoteUpdate
+              ? 'WordPress MAJ queued. Check delivery status before retrying.'
+              : !existingData.integration
               ? t('added_successfully', 'Added successfully')
               : t('updated_successfully', 'Updated successfully')
           );
@@ -802,10 +848,33 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       addEditSets,
       dummy,
       shortlinkPreferenceData,
+      loading,
+      channel,
+      wordpressIdentifier,
+      wordpressTarget,
     ]
   );
 
-  const scheduleLabel = dummy
+  const guardedSchedule =
+    (action: Parameters<typeof schedule>[0]) => async () => {
+      if (submitting.current || loading) return;
+      submitting.current = true;
+      try {
+        await schedule(action)();
+      } catch (error) {
+        toaster.show(
+          error instanceof Error ? error.message : 'Could not save the post',
+          'warning'
+        );
+      } finally {
+        submitting.current = false;
+        setLoading(false);
+      }
+    };
+
+  const scheduleLabel = wordpressTarget
+    ? 'Save Postiz details'
+    : dummy
     ? t('create_output', 'Create output')
     : !existingData?.integration
     ? t('add_to_calendar', 'Add to calendar')
@@ -818,28 +887,37 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         {
           label: t('save_set', 'Save Set'),
           variant: 'primary',
-          onClick: schedule('draft'),
+          onClick: guardedSchedule('draft'),
         },
       ]
     : [
+        ...(!dummy && wordpressTarget
+          ? [
+              {
+                label: 'MAJ WordPress',
+                variant: 'primary' as const,
+                onClick: guardedSchedule('wordpress-update'),
+              },
+            ]
+          : []),
         {
           label: scheduleLabel,
           variant: 'primary',
-          onClick: schedule('schedule'),
+          onClick: guardedSchedule(wordpressTarget ? 'update' : 'schedule'),
         },
-        ...(!dummy
+        ...(!dummy && !wordpressTarget
           ? [
               {
                 label: t('post_now', 'Post Now'),
                 variant: 'secondary' as const,
-                onClick: schedule('now'),
+                onClick: guardedSchedule('now'),
               },
             ]
           : []),
         {
           label: t('save_as_draft', 'Save as Draft'),
           variant: 'tertiary',
-          onClick: schedule('draft'),
+          onClick: guardedSchedule('draft'),
         },
       ];
 
@@ -1124,7 +1202,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 disabled={
                   selectedIntegrations.length === 0 || loading || locked
                 }
-                onClick={schedule('draft')}
+                onClick={guardedSchedule('draft')}
                 className="relative cursor-pointer disabled:cursor-not-allowed px-[20px] h-[44px] bg-btnSimple justify-center items-center flex rounded-[8px] text-[15px] font-[600]"
               >
                 {loading && (
@@ -1143,10 +1221,25 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 disabled={
                   selectedIntegrations.length === 0 || loading || locked
                 }
-                onClick={schedule('draft')}
+                onClick={guardedSchedule('draft')}
               >
                 Save Set
               </button>
+            )}
+            {!addEditSets && !dummy && wordpressTarget && (
+              <Button
+                type="button"
+                disabled={
+                  loading ||
+                  locked ||
+                  !selectedIntegrations.some(
+                    (item) => item.integration.id === channel.integration
+                  )
+                }
+                onClick={guardedSchedule('wordpress-update')}
+              >
+                MAJ WordPress #{wordpressTarget}
+              </Button>
             )}
             {!addEditSets && (
               <div ref={postNowRef} className="group cursor-pointer relative">
@@ -1154,7 +1247,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   disabled={
                     selectedIntegrations.length === 0 || loading || locked
                   }
-                  onClick={schedule('schedule')}
+                  onClick={guardedSchedule(
+                    wordpressTarget ? 'update' : 'schedule'
+                  )}
                   className="text-white relative min-w-[180px] btnSub disabled:cursor-not-allowed disabled:opacity-80 outline-none gap-[8px] flex justify-center items-center h-[44px] rounded-[8px] bg-[#612BD3] ps-[20px] pe-[16px]"
                 >
                   {loading && (
@@ -1172,7 +1267,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                       ? t('check_circles_above', 'Check the circles above')
                       : scheduleLabel}
                   </div>
-                  {!dummy && (
+                  {!dummy && !wordpressTarget && (
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1190,9 +1285,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   )}
                 </button>
 
-                {!dummy && (
+                {!dummy && !wordpressTarget && (
                   <button
-                    onClick={schedule('now')}
+                    onClick={guardedSchedule('now')}
                     disabled={
                       selectedIntegrations.length === 0 || loading || locked
                     }

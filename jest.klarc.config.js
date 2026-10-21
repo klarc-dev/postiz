@@ -4,6 +4,7 @@ module.exports = {
   rootDir: __dirname,
   testEnvironment: 'node',
   testMatch: [
+    '<rootDir>/apps/frontend/src/components/new-launch/wordpress.update.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/youtube.provider.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/dtos/posts/providers-settings/youtube.settings.dto.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/wordpress.provider.spec.ts',
