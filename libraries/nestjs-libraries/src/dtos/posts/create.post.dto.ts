@@ -118,6 +118,10 @@ export class CreatePostDto {
   @IsBoolean()
   republish?: boolean;
 
+  @IsOptional()
+  @IsString()
+  wordpressUpdateSource?: string;
+
   @IsDefined()
   @IsDateString()
   date: string;

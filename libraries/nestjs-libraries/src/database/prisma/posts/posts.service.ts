@@ -1102,6 +1102,19 @@ export class PostsService {
     creationMethod: CreationMethod,
     keepGroup = false
   ): Promise<any[]> {
+    if (body.wordpressUpdateSource !== undefined) {
+      const post = body.posts[0];
+      if (!body.wordpressUpdateSource || body.type !== 'now' || body.posts.length !== 1 ||
+          body.inter || body.shortLink || body.republish ||
+          post.settings.__type !== 'wordpress' || post.value.length !== 1 ||
+          post.value.some((item) => item.id)) {
+        throw new BadRequestException('MAJ requires one fresh WordPress delivery without repeats or shortlinks.');
+      }
+      return this._postRepository.withWordpressUpdateLock(
+        orgId, post.integration.id, body.wordpressUpdateSource, post.settings,
+        () => this.createPost(orgId, { ...body, wordpressUpdateSource: undefined }, creationMethod, keepGroup)
+      );
+    }
     const postList = [];
     const batchId = uuidv4();
     for (const post of body.posts) {

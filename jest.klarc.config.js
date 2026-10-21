@@ -4,6 +4,7 @@ module.exports = {
   rootDir: __dirname,
   testEnvironment: 'node',
   testMatch: [
+    '<rootDir>/libraries/nestjs-libraries/src/database/prisma/posts/wordpress.update.guard.spec.ts',
     '<rootDir>/apps/frontend/src/components/new-launch/wordpress.update.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/youtube.provider.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/dtos/posts/providers-settings/youtube.settings.dto.spec.ts',

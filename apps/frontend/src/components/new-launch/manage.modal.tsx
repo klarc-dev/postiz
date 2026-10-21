@@ -749,6 +749,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
       const data = {
         type,
+        ...(remoteUpdate ? { wordpressUpdateSource: channel.posts[0].id } : {}),
         ...(republish ? { republish } : {}),
         ...(!remoteUpdate && repeater ? { inter: repeater } : {}),
         tags,

@@ -1,4 +1,5 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { assertWordpressUpdateCurrent } from './wordpress.update.guard';
 import { Injectable } from '@nestjs/common';
 import { Post as PostBody } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
 import {
@@ -30,8 +31,28 @@ export class PostsRepository {
     private _comments: PrismaRepository<'comments'>,
     private _tags: PrismaRepository<'tags'>,
     private _tagsPosts: PrismaRepository<'tagsPosts'>,
-    private _errors: PrismaRepository<'errors'>
+    private _errors: PrismaRepository<'errors'>,
+    private _prisma: PrismaService
   ) {}
+
+  async withWordpressUpdateLock<T>(
+    orgId: string,
+    integrationId: string,
+    sourceId: string,
+    settings: Record<string, any>,
+    save: () => Promise<T>
+  ): Promise<T> {
+    return this._prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${orgId}), hashtext(${integrationId}))`;
+      const deliveries = await tx.post.findMany({
+        where: { organizationId: orgId, integrationId, parentPostId: null, deletedAt: null },
+        select: { id: true, state: true, releaseId: true, settings: true, createdAt: true },
+      });
+      assertWordpressUpdateCurrent(sourceId, deliveries, settings);
+      // The save commits its QUEUE row before releasing this per-channel lock.
+      return save();
+    }, { timeout: 30000 });
+  }
 
   searchForMissingThreeHoursPosts() {
     return this._post.model.post.findMany({
