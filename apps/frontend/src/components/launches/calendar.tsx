@@ -1191,6 +1191,43 @@ export const CalendarColumn: FC<{
     </div>
   );
 });
+type WordPressHistoryEntry = {
+  id: string;
+  group: string;
+  publishDate: string;
+  createdAt?: string;
+  state: string;
+};
+
+const WordPressHistory: FC<{
+  releaseId: string;
+  history: WordPressHistoryEntry[];
+}> = ({ releaseId, history }) => {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-[16px] p-[16px]">
+      <h2 className="text-[20px] font-semibold">WordPress #{releaseId}</h2>
+      <p>{t('wordpress_history_explanation', 'One article in the calendar. Each delivery is retained below, newest first. Opening the article editor uses the latest successful version.')}</p>
+      <ol className="flex flex-col gap-[12px] max-h-[60vh] overflow-auto">
+        {history.map((entry, index) => (
+          <li key={entry.id} className="border border-fifth rounded-[8px] p-[12px] flex flex-wrap items-center justify-between gap-[8px]">
+            <div>
+              <div className="font-medium">{index === 0 ? t('wordpress_latest_delivery', 'Latest successful version') : index === history.length - 1 ? t('wordpress_initial_delivery', 'First publication') : t('wordpress_update_delivery', 'Update')}</div>
+              <time dateTime={entry.createdAt || entry.publishDate}>
+                {newDayjs(entry.createdAt || entry.publishDate).local().format('LLL')}
+              </time>
+              <div className="text-[12px] opacity-70">{entry.id}</div>
+            </div>
+            <a className="underline focus-visible:outline focus-visible:outline-2" href={`/p/${encodeURIComponent(entry.id)}?share=true`} target="_blank" rel="noopener noreferrer">
+              {t('wordpress_view_delivery', 'View this version')}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+};
+
 const CalendarItem: FC<{
   date: dayjs.Dayjs;
   isBeforeNow: boolean;
@@ -1206,6 +1243,8 @@ const CalendarItem: FC<{
   display: 'day' | 'week' | 'month';
   showTime?: boolean;
   post: Post & {
+    wordpressTitle?: string;
+    wordpressHistory?: WordPressHistoryEntry[];
     integration: Integration;
     tags: {
       tag: Tags;
@@ -1229,6 +1268,15 @@ const CalendarItem: FC<{
     openPost,
   } = props;
   const { disableXAnalytics } = useVariables();
+  const modal = useModals();
+  const history = post.wordpressHistory;
+  const openHistory = useCallback(() => {
+    if (!history?.length || !post.releaseId) return;
+    modal.openModal({
+      title: t('wordpress_delivery_history', 'Publication and update history'),
+      children: <WordPressHistory releaseId={post.releaseId} history={history} />,
+    });
+  }, [history, post.releaseId, modal, t]);
   const user = useUser();
   const showCreationMethodBadge =
     user?.impersonate &&
@@ -1380,15 +1428,17 @@ const CalendarItem: FC<{
         >
           <Duplicate />
         </div>
-        <div
-          className={clsx(
-            'hidden group-hover:block hover:underline cursor-pointer text-red-500',
-            post?.tags?.[0]?.tag?.color && 'text-shadow-tags'
-          )}
-          onClick={deletePost}
-        >
-          <DeletePost />
-        </div>
+        {!history?.length && (
+          <div
+            className={clsx(
+              'hidden group-hover:block hover:underline cursor-pointer text-red-500',
+              post?.tags?.[0]?.tag?.color && 'text-shadow-tags'
+            )}
+            onClick={deletePost}
+          >
+            <DeletePost />
+          </div>
+        )}
       </div>
       <div
         onClick={editPost}
@@ -1417,11 +1467,11 @@ const CalendarItem: FC<{
           )}
         >
           <div className="text-start">
-            {state === 'DRAFT' ? t('draft', 'Draft') + ': ' : ''}
+            {state === 'DRAFT' ? t('draft', 'Draft') + ': ' : state === 'ERROR' ? t('failed_delivery', 'Failed delivery') + ': ' : ''}
           </div>
             <div className="w-full relative">
               <div className="absolute top-0 start-0 w-full text-ellipsis break-words line-clamp-1 text-start">
-                {stripHtmlValidation('none', post.content, false, true, false) ||
+                {post.wordpressTitle || stripHtmlValidation('none', post.content, false, true, false) ||
                   t('no_content', 'no content')}
               </div>
             </div>
@@ -1432,6 +1482,16 @@ const CalendarItem: FC<{
           </div>
         )}
       </div>
+      {!!history?.length && (
+        <button
+          type="button"
+          onClick={openHistory}
+          aria-label={`${t('wordpress_delivery_history', 'Publication and update history')} WordPress #${post.releaseId}`}
+          className="text-start text-[12px] px-[8px] py-[6px] bg-newColColor rounded-b-[10px] underline whitespace-normal break-words focus-visible:outline focus-visible:outline-2"
+        >
+          WordPress #{post.releaseId} · {history.length - 1} {t('wordpress_updates', 'updates')} · {t('history', 'History')}
+        </button>
+      )}
     </div>
   );
 });

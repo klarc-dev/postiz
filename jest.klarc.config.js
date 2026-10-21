@@ -11,6 +11,8 @@ module.exports = {
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/wordpress.provider.spec.ts',
     '<rootDir>/apps/orchestrator/src/wait-for-temporal.spec.ts',
     '<rootDir>/libraries/helpers/src/utils/sanitize.post.content.spec.ts',
+    '<rootDir>/libraries/helpers/src/utils/posts.list.minify.spec.ts',
+    '<rootDir>/libraries/nestjs-libraries/src/database/prisma/posts/wordpress.editorial.spec.ts',
   ],
   transform: {
     '^.+\\.(?:[jt]s|mjs)$': [
