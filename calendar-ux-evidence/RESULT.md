@@ -24,6 +24,12 @@ Authenticated target organization at social.klarc.eu, 21 October calendar:
 - Desktop history and editor screenshots retained. Mobile390x844 history visually inspected, readable stacked links, scrollable history and close control. Document width390, history list310, no horizontal overflow. CDP emulation resets between CLI invocations, so mobile capture and metric assertions ran together.
 - Raw public CLI post listing remains **47 all-channel jobs, 44 WordPress jobs, 43 successful,1 failed,13 distinct successful targets**. All44 WordPress job IDs exactly match the predeployment baseline. Nothing deleted or republished.
 
+## Whole-result verification rerun
+
+After completion, reran all9 final test suites:163 pass,1 optional skipped. Both final frontend and production backend TypeScript checks passed. Exhaustive reconciliation over all13 deployed article records verified exact raw-history ID membership, title matching latest source settings, earliest raw publication anchor, source matching latest projected creation time, and source independently matching latest raw publication time. All13 passed, with history counts5/3/3/3/3/3/3/3/3/3/3/4/4. Published-list total13 and separate failure1 also passed.
+
+The first custom reconciliation assertion failed because its comparator assumed the raw public API included `createdAt`. It does not. Inspected actual field keys, corrected the harness to use projected creation timestamps plus independent raw publication ordering, and reran successfully. This was a harness defect, not a product failure. No changes to production implementation were needed.
+
 ## Verification and limitations
 
 163 local tests pass,1 optional test skipped. Frontend and production backend TypeScript checks pass. Independent final review: no material blockers for28e448ab.
