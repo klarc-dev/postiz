@@ -14,6 +14,8 @@ import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id'
 import {
   voxelFieldsProblem,
   WordpressDto,
+  WordpressVoxelField,
+  WordpressVoxelSchema,
 } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
 import slugify from 'slugify';
 // import FormData from 'form-data';
@@ -417,27 +419,60 @@ export class WordpressProvider
   // use a plain `fetch` (with the SSRF guard) rather than `this.fetch`, which
   // calls `Context.current()` and throws outside an activity. This mirrors how
   // `authenticate` issues its request.
-  private async wpGet(token: string, path: string) {
-    const body = JSON.parse(Buffer.from(token, 'base64').toString()) as {
-      domain: string;
-      username: string;
-      password: string;
-    };
+  private async wpGet(
+    token: string,
+    path: string,
+    discovery = false,
+    allowForbidden = false
+  ) {
+    try {
+      const body = JSON.parse(Buffer.from(token, 'base64').toString()) as {
+        domain: string;
+        username: string;
+        password: string;
+      };
 
-    const auth = Buffer.from(`${body.username}:${body.password}`).toString(
-      'base64'
-    );
+      const auth = Buffer.from(`${body.username}:${body.password}`).toString(
+        'base64'
+      );
 
-    const response = await fetch(`${body.domain}${path}`, {
-      headers: {
-        Authorization: `Basic ${auth}`,
-        'User-Agent': WORDPRESS_USER_AGENT,
-      },
-      // @ts-ignore - undici-only option; blocks SSRF to internal IPs
-      dispatcher: getSsrfSafeDispatcher(),
-    });
+      const domain = discovery
+        ? body.domain.trim().replace(/\/+$/, '')
+        : body.domain;
+      const response = await fetch(`${domain}${path}`, {
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'User-Agent': WORDPRESS_USER_AGENT,
+        },
+        // @ts-ignore - undici-only option; blocks SSRF to internal IPs
+        dispatcher: getSsrfSafeDispatcher(),
+        ...(discovery ? { redirect: 'error' as const } : {}),
+      });
 
-    return response.json();
+      if (!discovery) return response.json();
+      if (allowForbidden && [401, 403].includes(response.status)) return null;
+      if (!response.ok) throw new Error('HTTP failure');
+      const result = await response.json();
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        result.code ||
+        result.error ||
+        result.success === false
+      ) {
+        throw new Error('Invalid response');
+      }
+      return result;
+    } catch (error) {
+      if (!discovery) throw error;
+      // Never expose response bodies, token contents, URLs or transport errors.
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'WordPress Voxel discovery failed. Check the REST API and connected user permissions.'
+      );
+    }
   }
 
   @Tool({
@@ -542,6 +577,216 @@ export class WordpressProvider
       postId: sample?.id ?? null,
       voxel_fields: sample?.voxel_fields ?? {},
     };
+  }
+
+  @Tool({
+    description:
+      'Discover destination Voxel field definitions and optionally current post values. Values are read representations, not a write payload.',
+    dataSchema: [
+      {
+        key: 'type',
+        type: 'string',
+        description: 'WordPress REST base, e.g. posts',
+      },
+      {
+        key: 'postId',
+        type: 'number',
+        description: 'Optional existing post id',
+      },
+    ],
+  })
+  async voxelFieldSchema(
+    token: string,
+    data: { type?: string; postId?: number }
+  ): Promise<WordpressVoxelSchema> {
+    const fail = () => {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'WordPress Voxel discovery returned an invalid schema or post response'
+      );
+    };
+    const record = (value: unknown): value is Record<string, any> =>
+      !!value && typeof value === 'object' && !Array.isArray(value);
+    const safeKey = (key: unknown): key is string =>
+      typeof key === 'string' &&
+      /^[a-z0-9_-]+$/i.test(key) &&
+      !['__proto__', 'constructor', 'prototype'].includes(key);
+    const type = data?.type === undefined ? 'posts' : data.type;
+    if (!safeKey(type)) {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'type must be a REST base'
+      );
+    }
+    if (
+      data?.postId !== undefined &&
+      !(Number.isSafeInteger(data.postId) && data.postId > 0)
+    ) {
+      throw new BadBody(
+        this.identifier,
+        '{}',
+        '{}',
+        'postId must be a positive WordPress post id'
+      );
+    }
+    const types = await this.wpGet(token, '/wp-json/wp/v2/types', true);
+    if (!record(types)) fail();
+    const matches = Object.entries(types).filter(
+      ([, entry]) =>
+        record(entry) &&
+        entry.rest_base === type &&
+        (!entry.rest_namespace || entry.rest_namespace === 'wp/v2')
+    );
+    if (matches.length !== 1 || !safeKey(matches[0][0])) fail();
+    const postType = matches[0][0];
+    const index = await this.wpGet(token, '/wp-json/', true);
+    if (
+      !Array.isArray(index.namespaces) ||
+      !index.namespaces.every(
+        (namespace: unknown) => typeof namespace === 'string'
+      )
+    )
+      fail();
+    const result: WordpressVoxelSchema = {
+      supported: false,
+      type,
+      postType,
+      fields: [],
+      configStatus: 'not_requested',
+      valuesStatus: 'not_requested',
+    };
+    // Never follow URLs advertised by the remote index. Only a known, advertised namespace.
+    if (!index.namespaces.includes('voxel-addon/v1')) return result;
+    const path = `/wp-json/voxel-addon/v1/post-types/${postType}/fields`;
+    const summary = await this.wpGet(token, path, true);
+    if (
+      !record(summary.data) &&
+      !(Array.isArray(summary.data) && summary.data.length === 0)
+    )
+      fail();
+    const normalize = (field: any, key: string): WordpressVoxelField => {
+      if (
+        !record(field) ||
+        !safeKey(key) ||
+        field.key !== key ||
+        typeof field.type !== 'string' ||
+        !field.type ||
+        typeof field.label !== 'string' ||
+        typeof field.required !== 'boolean'
+      )
+        fail();
+      const normalized: WordpressVoxelField = {
+        key,
+        type: field.type,
+        label: field.label,
+        required: field.required,
+      };
+      for (const name of ['description', 'placeholder'] as const) {
+        if (field[name] !== undefined && field[name] !== null) {
+          if (typeof field[name] !== 'string') fail();
+          normalized[name] = field[name];
+        }
+      }
+      for (const name of ['maxlength', 'min', 'max', 'step'] as const) {
+        if (field[name] !== undefined && field[name] !== null) {
+          if (typeof field[name] !== 'number' || !Number.isFinite(field[name]))
+            fail();
+          normalized[name] = field[name];
+        }
+      }
+      if (field.choices !== undefined && field.choices !== null) {
+        if (!Array.isArray(field.choices)) fail();
+        normalized.choices = field.choices.map((choice: any) => {
+          if (
+            !record(choice) ||
+            typeof choice.value !== 'string' ||
+            typeof choice.label !== 'string'
+          )
+            fail();
+          return { value: choice.value, label: choice.label };
+        });
+      }
+      // Defaults are metadata, not arbitrary remote objects containing private config.
+      if (
+        field.default === null ||
+        ['string', 'boolean'].includes(typeof field.default) ||
+        (typeof field.default === 'number' && Number.isFinite(field.default))
+      ) {
+        normalized.default = field.default;
+      }
+      return normalized;
+    };
+    result.fields = Object.entries(summary.data).map(([key, field]) =>
+      normalize(field, key)
+    );
+    result.supported = true;
+    if (result.fields.some((field) => field.type === 'repeater')) {
+      const config = await this.wpGet(
+        token,
+        `/wp-json/voxel-addon/v1/config/post-types/${postType}/fields`,
+        true,
+        true
+      );
+      if (config === null) {
+        result.configStatus = 'forbidden';
+      } else {
+        if (!Array.isArray(config.data)) fail();
+        const children = (
+          fields: unknown,
+          depth: number
+        ): WordpressVoxelField[] => {
+          if (!Array.isArray(fields) || depth > 16) return fail();
+          const keys = new Set<string>();
+          return fields.map((field: any) => {
+            if (!record(field) || !safeKey(field.key) || keys.has(field.key))
+              fail();
+            keys.add(field.key);
+            const child = normalize(
+              { ...field, required: field.required ?? false },
+              field.key
+            );
+            if (field.type === 'repeater' && field.fields !== undefined) {
+              child.children = children(field.fields, depth + 1);
+            }
+            return child;
+          });
+        };
+        for (const field of result.fields) {
+          if (field.type !== 'repeater') continue;
+          const matches = config.data.filter(
+            (item: any) => record(item) && item.key === field.key
+          );
+          if (matches.length > 1) fail();
+          const definition = matches[0];
+          if (definition && definition.type !== field.type) fail();
+          if (definition?.fields !== undefined)
+            field.children = children(definition.fields, 1);
+        }
+        result.configStatus = 'loaded';
+      }
+    }
+    if (data?.postId !== undefined) {
+      const post = await this.wpGet(
+        token,
+        `/wp-json/wp/v2/${type}/${data.postId}?context=edit&_fields=id,voxel_fields`,
+        true
+      );
+      const emptyValues =
+        Array.isArray(post.voxel_fields) && post.voxel_fields.length === 0;
+      if (
+        post.id !== data.postId ||
+        (!record(post.voxel_fields) && !emptyValues)
+      )
+        fail();
+      // Preserve unknown field values verbatim. The editor must not send these back automatically.
+      result.values = emptyValues ? {} : post.voxel_fields;
+      result.valuesStatus = 'loaded';
+    }
+    return result;
   }
 
   async post(

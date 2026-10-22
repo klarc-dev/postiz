@@ -18,6 +18,319 @@ const errorsFor = async (value: object) =>
     (e) => e.property
   );
 
+describe('WordPress destination Voxel discovery', () => {
+  const token = Buffer.from(
+    JSON.stringify({
+      domain: 'https://example.com/',
+      username: 'user',
+      password: 'secret',
+    })
+  ).toString('base64');
+  const json = (value: unknown, status = 200) =>
+    new Response(JSON.stringify(value), { status });
+  const field = (key = 'h1', type = 'text') => ({
+    key,
+    type,
+    label: key,
+    required: false,
+  });
+  let provider: WordpressProvider;
+  let request: jest.SpyInstance;
+  const setup = (fields: unknown = { h1: field() }) => {
+    request
+      .mockResolvedValueOnce(
+        json({ post: { rest_base: 'posts', rest_namespace: 'wp/v2' } })
+      )
+      .mockResolvedValueOnce(
+        json({
+          namespaces: ['wp/v2', 'voxel-addon/v1'],
+          url: 'https://evil.example',
+        })
+      )
+      .mockResolvedValueOnce(json({ data: fields }));
+  };
+  beforeEach(() => {
+    provider = new WordpressProvider();
+    request = jest.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it.each([{}, []])(
+    'accepts an authoritative empty field map %j',
+    async (fields) => {
+      setup(fields);
+      expect(await provider.voxelFieldSchema(token, {})).toMatchObject({
+        supported: true,
+        fields: [],
+      });
+      expect(request).toHaveBeenCalledTimes(3);
+    }
+  );
+
+  it.each([
+    {},
+    [],
+    { post: { rest_base: 'pages' } },
+    { post: { rest_base: 'posts' }, article: { rest_base: 'posts' } },
+    { '../post': { rest_base: 'posts' } },
+    { post: { rest_base: 'posts', rest_namespace: 'unsafe/v1' } },
+  ])(
+    'rejects invalid or ambiguous native REST type mappings %j',
+    async (types) => {
+      request.mockResolvedValueOnce(json(types));
+      await expect(provider.voxelFieldSchema(token, {})).rejects.toThrow(
+        /discovery/
+      );
+      expect(request).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each([{}, { namespaces: 'voxel-addon/v1' }, { namespaces: [null] }])(
+    'rejects malformed REST namespace discovery %j',
+    async (index) => {
+      request
+        .mockResolvedValueOnce(json({ post: { rest_base: 'posts' } }))
+        .mockResolvedValueOnce(json(index));
+      await expect(provider.voxelFieldSchema(token, {})).rejects.toThrow(
+        /discovery/
+      );
+    }
+  );
+
+  it.each([
+    {},
+    { data: {} },
+    { data: [{ ...field('faq', 'repeater'), fields: {} }] },
+    {
+      data: [{ ...field('faq', 'repeater'), fields: [field('q'), field('q')] }],
+    },
+    { data: [{ ...field('faq', 'text'), fields: [] }] },
+    { code: 'failure', message: 'secret' },
+  ])('rejects malformed advertised configuration %j', async (config) => {
+    setup({ faq: field('faq', 'repeater') });
+    request.mockResolvedValueOnce(json(config));
+    await expect(provider.voxelFieldSchema(token, {})).rejects.toThrow(
+      /discovery/
+    );
+  });
+
+  it('authenticates every SSRF guarded request and maps REST posts to WP post', async () => {
+    setup({
+      h1: {
+        ...field(),
+        description: 'Heading',
+        placeholder: 'Title',
+        maxlength: 100,
+        min: 1,
+        max: 20,
+        step: 2,
+        default: 'Default',
+        password: 'private',
+        choices: [{ value: 'a', label: 'A', secret: 'private' }],
+      },
+    });
+    const result = await provider.voxelFieldSchema(token, {});
+    expect(result).toMatchObject({
+      supported: true,
+      type: 'posts',
+      postType: 'post',
+      valuesStatus: 'not_requested',
+      configStatus: 'not_requested',
+    });
+    expect(result.fields).toEqual([
+      {
+        ...field(),
+        description: 'Heading',
+        placeholder: 'Title',
+        maxlength: 100,
+        min: 1,
+        max: 20,
+        step: 2,
+        default: 'Default',
+        choices: [{ value: 'a', label: 'A' }],
+      },
+    ]);
+    expect(request.mock.calls.map(([url]) => url)).toEqual([
+      'https://example.com/wp-json/wp/v2/types',
+      'https://example.com/wp-json/',
+      'https://example.com/wp-json/voxel-addon/v1/post-types/post/fields',
+    ]);
+    for (const [, options] of request.mock.calls) {
+      expect(options.headers.Authorization).toBe(
+        `Basic ${Buffer.from('user:secret').toString('base64')}`
+      );
+      expect(options.dispatcher).toBeDefined();
+      expect(options.redirect).toBe('error');
+      expect(options.method).toBeUndefined();
+    }
+  });
+
+  it('returns unsupported only for an absent advertised addon, ignoring arbitrary index URLs', async () => {
+    request
+      .mockResolvedValueOnce(json({ page: { rest_base: 'pages' } }))
+      .mockResolvedValueOnce(
+        json({ namespaces: ['wp/v2', 'https://evil.example/voxel-addon/v1'] })
+      );
+    expect(await provider.voxelFieldSchema(token, { type: 'pages' })).toEqual({
+      supported: false,
+      type: 'pages',
+      postType: 'page',
+      fields: [],
+      configStatus: 'not_requested',
+      valuesStatus: 'not_requested',
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { type: '../posts' },
+    { type: 'posts?x=1' },
+    { type: '' },
+    { type: null },
+    ...[0, -1, '42', 1.2, null, Number.MAX_SAFE_INTEGER + 1].map((postId) => ({
+      postId,
+    })),
+  ])('rejects unsafe input before any request: %j', async (data) => {
+    await expect(
+      provider.voxelFieldSchema(token, data as any)
+    ).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('normalizes PHP empty current values to an empty object', async () => {
+    setup();
+    request.mockResolvedValueOnce(json({ id: 42, voxel_fields: [] }));
+    expect(
+      await provider.voxelFieldSchema(token, { postId: 42 })
+    ).toMatchObject({ values: {}, valuesStatus: 'loaded' });
+  });
+
+  it('preserves all read values including unknown and complex fields without automatic writes', async () => {
+    setup();
+    const values = {
+      h1: 'Current',
+      unknown: [{ relation: { id: 3, label: 'R' } }],
+      choice: { value: 'a', label: 'A' },
+    };
+    request.mockResolvedValueOnce(json({ id: 42, voxel_fields: values }));
+    expect(
+      await provider.voxelFieldSchema(token, { postId: 42 })
+    ).toMatchObject({ values, valuesStatus: 'loaded' });
+    expect(request.mock.calls[3][0]).toBe(
+      'https://example.com/wp-json/wp/v2/posts/42?context=edit&_fields=id,voxel_fields'
+    );
+  });
+
+  it.each([
+    { id: 43, voxel_fields: {} },
+    { id: '42', voxel_fields: {} },
+    { id: 42 },
+    { id: 42, voxel_fields: ['bad'] },
+    { code: 'denied', message: 'secret' },
+  ])('rejects invalid current post values: %j', async (post) => {
+    setup();
+    request.mockResolvedValueOnce(json(post));
+    await expect(
+      provider.voxelFieldSchema(token, { postId: 42 })
+    ).rejects.toThrow(/discovery/);
+  });
+
+  it('loads recursive child definitions only for fields present in public summary', async () => {
+    setup({ faq: field('faq', 'repeater') });
+    request.mockResolvedValueOnce(
+      json({
+        data: [
+          {
+            ...field('faq', 'repeater'),
+            password: 'secret',
+            fields: [
+              { ...field('question'), private: 'secret' },
+              { ...field('nested', 'repeater'), fields: [field('answer')] },
+            ],
+          },
+          { ...field('private'), fields: [field('secret')] },
+        ],
+      })
+    );
+    const result = await provider.voxelFieldSchema(token, {});
+    expect(result.configStatus).toBe('loaded');
+    expect(result.fields).toEqual([
+      {
+        ...field('faq', 'repeater'),
+        children: [
+          field('question'),
+          { ...field('nested', 'repeater'), children: [field('answer')] },
+        ],
+      },
+    ]);
+    expect(request.mock.calls[3][0]).toBe(
+      'https://example.com/wp-json/voxel-addon/v1/config/post-types/post/fields'
+    );
+  });
+
+  it('does not fabricate children when configuration access is forbidden', async () => {
+    setup({ faq: field('faq', 'repeater') });
+    request.mockResolvedValueOnce(
+      json({ code: 'forbidden', message: 'secret' }, 403)
+    );
+    expect(await provider.voxelFieldSchema(token, {})).toMatchObject({
+      configStatus: 'forbidden',
+      fields: [field('faq', 'repeater')],
+    });
+  });
+
+  it.each([
+    null,
+    [],
+    {},
+    { data: null },
+    { data: [field()] },
+    { data: { h1: {} } },
+    { data: { h1: { ...field(), required: 'yes' } } },
+    { data: { h1: { ...field(), choices: [{}] } } },
+    { data: { h1: { ...field(), max: 'ten' } } },
+    { code: 'failure', message: 'secret' },
+    { success: false },
+    { error: 'secret' },
+  ])('rejects malformed/error-200 schema: %j', async (schema) => {
+    // Invalid schema must not masquerade as unsupported or an empty schema.
+    request
+      .mockResolvedValueOnce(json({ post: { rest_base: 'posts' } }))
+      .mockResolvedValueOnce(json({ namespaces: ['voxel-addon/v1'] }))
+      .mockResolvedValueOnce(json(schema));
+    await expect(provider.voxelFieldSchema(token, {})).rejects.toThrow(
+      /discovery/
+    );
+  });
+
+  it.each([401, 403, 404, 500])('sanitizes HTTP %i errors', async (status) => {
+    request.mockResolvedValueOnce(
+      json({ code: 'secret', message: token }, status)
+    );
+    try {
+      await provider.voxelFieldSchema(token, {});
+      throw new Error('expected rejection');
+    } catch (error) {
+      expect(String(error)).toContain('discovery');
+      expect(JSON.stringify(error)).not.toContain(token);
+      expect(JSON.stringify(error)).not.toContain('secret');
+    }
+  });
+
+  it('sanitizes network and JSON failures', async () => {
+    request.mockRejectedValueOnce(
+      new Error(`https://user:secret@example.com ${token}`)
+    );
+    await expect(provider.voxelFieldSchema(token, {})).rejects.toThrow(
+      /discovery/
+    );
+    request.mockResolvedValueOnce(new Response('<html>secret</html>'));
+    await expect(provider.voxelFieldSchema(token, {})).rejects.toThrow(
+      /discovery/
+    );
+  });
+});
+
 describe('WordPress settings validation', () => {
   it('keeps the new fields optional', async () => {
     expect(await errorsFor({})).toEqual([]);
@@ -545,7 +858,11 @@ describe('WordPress errors', () => {
       WordpressProvider.prototype
     ).map((t: any) => t.methodName);
     expect(tools).toEqual(
-      expect.arrayContaining(['authorsList', 'voxelFieldsSample'])
+      expect.arrayContaining([
+        'authorsList',
+        'voxelFieldsSample',
+        'voxelFieldSchema',
+      ])
     );
   });
 });

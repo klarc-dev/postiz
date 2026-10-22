@@ -20,6 +20,33 @@ import { MediaDto } from '@gitroom/nestjs-libraries/dtos/media/media.dto';
 import { Type } from 'class-transformer';
 import { JSONSchema } from 'class-validator-jsonschema';
 
+/** Destination metadata only. Current values are read representations, not write payloads. */
+export interface WordpressVoxelField {
+  key: string;
+  type: string;
+  label: string;
+  required: boolean;
+  description?: string;
+  placeholder?: string;
+  choices?: { value: string; label: string }[];
+  maxlength?: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  default?: unknown;
+  children?: WordpressVoxelField[];
+}
+
+export interface WordpressVoxelSchema {
+  supported: boolean;
+  type: string;
+  postType: string;
+  fields: WordpressVoxelField[];
+  configStatus: 'loaded' | 'forbidden' | 'not_requested';
+  valuesStatus: 'loaded' | 'not_requested';
+  values?: Record<string, unknown>;
+}
+
 // Limits mirror the receiving WordPress adapter (64 KiB decoded payload, 16
 // levels of JSON nesting) so Postiz rejects what WordPress would reject.
 export const WORDPRESS_VOXEL_FIELDS_MAX_BYTES = 65536;
