@@ -14,7 +14,9 @@ import type {
 } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
 
 const control =
-  'w-full min-w-0 px-[12px] py-[8px] rounded-[4px] bg-input border border-fifth text-[14px]';
+  'w-full min-w-0 px-[12px] py-[8px] rounded-[4px] bg-input border border-fifth text-[14px] focus-visible:ring-2 focus-visible:ring-btnPrimary';
+const action =
+  'rounded-[4px] px-[8px] py-[6px] text-[13px] border border-newSep focus-visible:ring-2 focus-visible:ring-btnPrimary disabled:opacity-40';
 const object = (value: unknown): value is Record<string, any> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 const owns = (value: unknown, key: string) =>
@@ -22,6 +24,17 @@ const owns = (value: unknown, key: string) =>
 
 /** Read projections are display-only. Never send the serializer's enriched objects back. */
 export function voxelDisplayValue(field: WordpressVoxelField, value: any): any {
+  if (field.type === 'repeater' && Array.isArray(value))
+    return value.map((row) =>
+      object(row)
+        ? Object.fromEntries(
+            Object.entries(row).map(([key, item]) => {
+              const child = field.children?.find((child) => child.key === key);
+              return [key, child ? voxelDisplayValue(child, item) : item];
+            })
+          )
+        : row
+    );
   if (field.type === 'select' && object(value)) return value.value;
   if (field.type === 'multiselect' && Array.isArray(value))
     return value.map((item) => (object(item) ? item.value : item));
@@ -89,7 +102,10 @@ function useVoxelSchema(
         !result ||
         typeof result.supported !== 'boolean' ||
         !Array.isArray(result.fields) ||
-        result.type !== type
+        result.type !== type ||
+        (result.supported &&
+          postId &&
+          (result.valuesStatus !== 'loaded' || !object(result.values)))
       )
         throw new Error(
           'The destination returned an invalid field definition.'
@@ -107,16 +123,23 @@ function useVoxelSchema(
 const VoxelControl: FC<{
   field: WordpressVoxelField;
   value: any;
+  readValue?: any;
   onChange: (value: any) => void;
+  onReset?: () => void;
   depth?: number;
-}> = ({ field, value, onChange, depth = 0 }) => {
+}> = ({ field, value, readValue, onChange, onReset, depth = 0 }) => {
   const id = useId();
   const kind = field.type;
   const text =
     typeof value === 'string' || typeof value === 'number' ? String(value) : '';
   const choices = field.choices || [];
+  const props = {
+    id,
+    'aria-describedby': field.description ? `${id}-description` : undefined,
+    className: control,
+  };
   const label = (
-    <label htmlFor={id} className="text-[14px] font-medium">
+    <label id={`${id}-label`} htmlFor={id} className="text-[14px] font-medium">
       {field.label || field.key}
       {field.required ? ' *' : ''}
     </label>
@@ -125,7 +148,12 @@ const VoxelControl: FC<{
   if (kind === 'repeater' && field.children?.length && depth < 5) {
     const rows = Array.isArray(value) ? value : [];
     input = (
-      <div className="flex flex-col gap-[12px]">
+      <div
+        role="group"
+        aria-labelledby={`${id}-label`}
+        aria-describedby={props['aria-describedby']}
+        className="flex flex-col gap-[12px]"
+      >
         {rows.map((row: any, index: number) => (
           <fieldset
             key={index}
@@ -138,10 +166,7 @@ const VoxelControl: FC<{
               <VoxelControl
                 key={child.key}
                 field={child}
-                value={voxelDisplayValue(
-                  child,
-                  object(row) ? row[child.key] : undefined
-                )}
+                value={object(row) ? row[child.key] : undefined}
                 depth={depth + 1}
                 onChange={(next) =>
                   onChange(
@@ -154,20 +179,45 @@ const VoxelControl: FC<{
                 }
               />
             ))}
-            <button
-              type="button"
-              className="self-start underline text-[13px]"
-              onClick={() =>
-                onChange(rows.filter((_: any, i: number) => i !== index))
-              }
-            >
-              Remove {field.label || field.key} {index + 1}
-            </button>
+            <div className="flex flex-wrap gap-[8px]">
+              {[-1, 1].map((direction) => (
+                <button
+                  key={direction}
+                  type="button"
+                  className={action}
+                  disabled={
+                    index + direction < 0 || index + direction >= rows.length
+                  }
+                  aria-label={`Move ${field.label || field.key} ${index + 1} ${
+                    direction < 0 ? 'up' : 'down'
+                  }`}
+                  onClick={() => {
+                    const next = [...rows];
+                    [next[index], next[index + direction]] = [
+                      next[index + direction],
+                      next[index],
+                    ];
+                    onChange(next);
+                  }}
+                >
+                  {direction < 0 ? 'Move up' : 'Move down'}
+                </button>
+              ))}
+              <button
+                type="button"
+                className={action}
+                onClick={() =>
+                  onChange(rows.filter((_: any, i: number) => i !== index))
+                }
+              >
+                Remove {field.label || field.key} {index + 1}
+              </button>
+            </div>
           </fieldset>
         ))}
         <button
           type="button"
-          className="self-start border border-fifth rounded-[4px] px-[12px] py-[8px]"
+          className={`self-start ${action}`}
           onClick={() => onChange([...rows, {}])}
         >
           Add {field.label || field.key}
@@ -177,18 +227,17 @@ const VoxelControl: FC<{
   } else if (kind === 'switcher') {
     input = (
       <input
-        id={id}
+        {...props}
         type="checkbox"
         checked={value === true}
         onChange={(event) => onChange(event.target.checked)}
-        className="self-start h-[20px] w-[20px]"
+        className="self-start h-[20px] w-[20px] focus-visible:ring-2 focus-visible:ring-btnPrimary"
       />
     );
   } else if (kind === 'select' && choices.length) {
     input = (
       <select
-        id={id}
-        className={control}
+        {...props}
         value={text}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -206,7 +255,12 @@ const VoxelControl: FC<{
   } else if (kind === 'multiselect' && choices.length) {
     const selected: string[] = Array.isArray(value) ? value.map(String) : [];
     input = (
-      <fieldset id={id} className="flex flex-col gap-[8px]">
+      <fieldset
+        id={id}
+        aria-describedby={props['aria-describedby']}
+        aria-labelledby={`${id}-label`}
+        className="flex flex-col gap-[8px]"
+      >
         {[
           ...choices,
           ...selected
@@ -237,6 +291,7 @@ const VoxelControl: FC<{
       kind
     )
   ) {
+    const items = Array.isArray(readValue) ? readValue : [readValue];
     input = (
       <div className="text-[13px] opacity-80">
         <p>
@@ -245,7 +300,17 @@ const VoxelControl: FC<{
         </p>
         <p>
           {Array.isArray(value) && value.length
-            ? `Destination IDs: ${value.join(', ')}`
+            ? value
+                .map((id) => {
+                  const item = items.find(
+                    (item) => object(item) && Number(item.id) === id
+                  );
+                  const label = item?.name || item?.title;
+                  return typeof label === 'string' && label
+                    ? `${label} (#${id})`
+                    : `#${id}`;
+                })
+                .join(', ')
             : 'No current value'}
         </p>
       </div>
@@ -265,22 +330,21 @@ const VoxelControl: FC<{
     ].includes(kind)
   ) {
     const multiline = ['texteditor', 'textarea'].includes(kind);
-    const props = {
-      id,
-      className: control,
+    const textProps = {
+      ...props,
       value: text,
       placeholder: field.placeholder || '',
       maxLength: field.maxlength || undefined,
     };
     input = multiline ? (
       <textarea
-        {...props}
+        {...textProps}
         rows={4}
         onChange={(event) => onChange(event.target.value)}
       />
     ) : (
       <input
-        {...props}
+        {...textProps}
         type={
           ['url', 'email', 'number', 'date', 'time', 'color'].includes(kind)
             ? kind
@@ -320,9 +384,23 @@ const VoxelControl: FC<{
       className="flex flex-col gap-[6px] min-w-0"
       data-voxel-field={field.key}
     >
-      {label}
+      <div className="flex items-center justify-between gap-[8px]">
+        {label}
+        {onReset ? (
+          <button
+            type="button"
+            className={action}
+            aria-label={`Reset ${field.label || field.key}`}
+            onClick={onReset}
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
       {field.description ? (
-        <p className="text-[12px] opacity-70">{field.description}</p>
+        <p id={`${id}-description`} className="text-[12px] opacity-70">
+          {field.description}
+        </p>
       ) : null}
       {input}
     </div>
@@ -401,6 +479,17 @@ export const WordpressVoxelFields: FC<{ name: string }> = ({ name }) => {
   const unknown = Object.keys(currentPatch).filter(
     (key) => !data.fields.some((field) => field.key === key)
   );
+  const update = (key: string, value?: unknown) => {
+    const next = {
+      ...(object(form.getValues(name)) ? form.getValues(name) : {}),
+    };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    form.setValue(name, Object.keys(next).length ? next : undefined, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
   return (
     <section
       className="mt-[16px] flex flex-col gap-[16px] min-w-0"
@@ -419,21 +508,19 @@ export const WordpressVoxelFields: FC<{ name: string }> = ({ name }) => {
           <VoxelControl
             key={`${scope}:${field.key}`}
             field={field}
-            value={
+            readValue={data.values?.[field.key]}
+            value={voxelDisplayValue(
+              field,
               owns(currentPatch, field.key)
                 ? currentPatch[field.key]
-                : voxelDisplayValue(field, data.values?.[field.key])
+                : data.values?.[field.key]
+            )}
+            onReset={
+              owns(currentPatch, field.key)
+                ? () => update(field.key)
+                : undefined
             }
-            onChange={(next) =>
-              form.setValue(
-                name,
-                {
-                  ...(object(form.getValues(name)) ? form.getValues(name) : {}),
-                  [field.key]: next,
-                },
-                { shouldValidate: true, shouldDirty: true }
-              )
-            }
+            onChange={(next) => update(field.key, next)}
           />
         ))
       ) : (

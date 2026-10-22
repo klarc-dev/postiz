@@ -7,7 +7,7 @@ import {
   afterEach,
   afterAll,
 } from '@jest/globals';
-import React from 'react';
+import React, { useState } from 'react';
 // These controls do not use canvas. Avoid requiring its optional native binding.
 jest.mock('canvas', () => ({}));
 const { JSDOM } = require('jsdom');
@@ -85,11 +85,12 @@ function Harness({
   initial?: any;
 }) {
   const form = useForm({ defaultValues: initial });
+  const [cache] = useState(() => new Map());
   latestForm = form;
   return (
     <SWRConfig
       value={{
-        provider: () => new Map(),
+        provider: () => cache,
         dedupingInterval: 0,
         loadingTimeout: 0,
       }}
@@ -254,4 +255,229 @@ it('normalizes read-only projections without changing their source objects and e
       { key: 'h1', type: 'text', label: 'H1', required: false },
     ]).map((f) => f.key)
   ).toEqual(['h1']);
+});
+
+it('resets one changed field to destination values without sending a replacement or losing other patches', async () => {
+  render(
+    <Harness
+      initial={{
+        type: 'posts',
+        existing_post_id: 42,
+        voxel_fields: { unknown: 7 },
+      }}
+    />
+  );
+  fireEvent.change(await screen.findByDisplayValue('Remote heading'), {
+    target: { value: 'Edited' },
+  });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Reset Article heading' })
+  );
+  expect(screen.getByDisplayValue('Remote heading')).toBeTruthy();
+  expect(latestForm.getValues('voxel_fields')).toEqual({ unknown: 7 });
+  fireEvent.click(screen.getByLabelText('Enabled'));
+  fireEvent.click(screen.getByRole('button', { name: 'Reset Enabled' }));
+  expect(latestForm.getValues('voxel_fields')).toEqual({ unknown: 7 });
+});
+
+it('reorders complete repeater rows without dropping unknown values, then resets to remote order', async () => {
+  render(<Harness />);
+  await screen.findByDisplayValue('Existing question');
+  fireEvent.click(screen.getByText('Add FAQ'));
+  fireEvent.change(screen.getAllByLabelText('Question')[1], {
+    target: { value: 'Second question' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Move FAQ 2 up' }));
+  expect(latestForm.getValues('voxel_fields').faq).toEqual([
+    { question: 'Second question' },
+    {
+      question: 'Existing question',
+      answer: '<p>Existing answer</p>',
+      opaque: 7,
+    },
+  ]);
+  fireEvent.click(screen.getByRole('button', { name: 'Reset FAQ' }));
+  expect(latestForm.getValues('voxel_fields')).toBeUndefined();
+  expect(screen.getAllByLabelText('Question')).toHaveLength(1);
+});
+
+it('canonicalizes known nested read projections while retaining unknown repeater children without mutating reads', () => {
+  const field: any = {
+    key: 'rows',
+    type: 'repeater',
+    children: [
+      { key: 'select', type: 'select' },
+      { key: 'multi', type: 'multiselect' },
+      {
+        key: 'nested',
+        type: 'repeater',
+        children: [{ key: 'image', type: 'image' }],
+      },
+    ],
+  };
+  const read = [
+    {
+      select: { value: 'a', label: 'A' },
+      multi: [{ value: 'b', label: 'B' }],
+      nested: [{ image: [{ id: 12, url: 'https://example.com/image.jpg' }] }],
+      unknown: { keep: true },
+    },
+  ];
+  const original = JSON.stringify(read);
+  expect(voxelDisplayValue(field, read)).toEqual([
+    {
+      select: 'a',
+      multi: ['b'],
+      nested: [{ image: [12] }],
+      unknown: { keep: true },
+    },
+  ]);
+  expect(JSON.stringify(read)).toBe(original);
+});
+
+it('never copies enriched repeater siblings into a patch when editing a different child', async () => {
+  const response: any = schema();
+  response.fields[1].children.push({
+    key: 'choice',
+    label: 'Choice',
+    type: 'select',
+    choices: [{ value: 'a', label: 'A' }],
+  });
+  response.values.faq[0].choice = { value: 'a', label: 'A' };
+  request.mockResolvedValue({ ok: true, json: async () => response });
+  render(<Harness />);
+  fireEvent.change(await screen.findByDisplayValue('Existing question'), {
+    target: { value: 'Changed' },
+  });
+  expect(latestForm.getValues('voxel_fields').faq[0]).toEqual({
+    question: 'Changed',
+    answer: '<p>Existing answer</p>',
+    opaque: 7,
+    choice: 'a',
+  });
+  expect(response.values.faq[0].choice).toEqual({ value: 'a', label: 'A' });
+});
+
+it('ignores late discovery from another destination scope while retaining the active patch', async () => {
+  let resolvePosts: (value: any) => void;
+  request.mockImplementation(async (_url: any, options: any) => {
+    const type = JSON.parse(options.body).data.type;
+    if (type === 'posts')
+      return new Promise((resolve) => {
+        resolvePosts = resolve;
+      });
+    return {
+      ok: true,
+      json: async () => ({ ...schema(type), values: { h1: 'Page heading' } }),
+    };
+  });
+  render(<Harness />);
+  expect(screen.getByRole('status')).toBeTruthy();
+  fireEvent.click(screen.getByText('Pages'));
+  fireEvent.change(await screen.findByDisplayValue('Page heading'), {
+    target: { value: 'Page edit' },
+  });
+  await act(async () => {
+    resolvePosts!({ ok: true, json: async () => schema() });
+  });
+  expect(screen.queryByDisplayValue('Remote heading')).toBeNull();
+  expect(screen.getByDisplayValue('Page edit')).toBeTruthy();
+  expect(latestForm.getValues('voxel_fields')).toEqual({ h1: 'Page edit' });
+});
+
+it('refuses to edit existing repeaters when the response has not loaded the target values', async () => {
+  request.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...schema(),
+      valuesStatus: 'not_requested',
+      values: undefined as undefined,
+    }),
+  });
+  render(<Harness />);
+  await screen.findByRole('alert');
+  expect(screen.queryByText('Add FAQ')).toBeNull();
+  expect(latestForm.getValues('voxel_fields')).toBeUndefined();
+});
+
+it('shows destination-provided preserved labels as text without copying read objects into patches', async () => {
+  const response: any = schema();
+  response.fields.push({
+    key: 'related',
+    label: 'Related articles',
+    type: 'post-relation',
+  });
+  response.values.related = [
+    { id: 9, title: '<script>unsafe</script>' },
+    { id: 10, title: 'Related title' },
+  ];
+  response.fields[0].description = 'Destination guidance';
+  request.mockResolvedValue({ ok: true, json: async () => response });
+  render(<Harness />);
+  const heading = await screen.findByDisplayValue('Remote heading');
+  const description = document.getElementById(
+    heading.getAttribute('aria-describedby')
+  );
+  expect(description?.textContent).toBe('Destination guidance');
+  expect(
+    screen.getByText('<script>unsafe</script> (#9), Related title (#10)')
+  ).toBeTruthy();
+  expect(document.querySelector('script')).toBeNull();
+  fireEvent.change(heading, { target: { value: 'Edited' } });
+  expect(latestForm.getValues('voxel_fields')).toEqual({ h1: 'Edited' });
+});
+
+it('isolates deferred requests and unsaved patches by target post id, including cached returns', async () => {
+  let resolveFirst: (value: any) => void;
+  request.mockImplementation(async (_url: any, options: any) => {
+    const id = JSON.parse(options.body).data.postId;
+    const response = {
+      ok: true,
+      json: async () => ({ ...schema(), values: { h1: `Heading ${id}` } }),
+    };
+    if (id === 42)
+      return new Promise((resolve) => {
+        resolveFirst = resolve;
+      });
+    return response;
+  });
+  render(<Harness />);
+  act(() => latestForm.setValue('existing_post_id', 43));
+  fireEvent.change(await screen.findByDisplayValue('Heading 43'), {
+    target: { value: 'Local 43' },
+  });
+  await act(async () => {
+    resolveFirst!({
+      ok: true,
+      json: async () => ({ ...schema(), values: { h1: 'Heading 42' } }),
+    });
+  });
+  expect(screen.getByDisplayValue('Local 43')).toBeTruthy();
+  act(() => latestForm.setValue('existing_post_id', 42));
+  fireEvent.change(await screen.findByDisplayValue('Heading 42'), {
+    target: { value: 'Local 42' },
+  });
+  act(() => latestForm.setValue('existing_post_id', 43));
+  await screen.findByDisplayValue('Local 43');
+  expect(latestForm.getValues('voxel_fields')).toEqual({ h1: 'Local 43' });
+});
+
+it('ignores a late failure from an abandoned target without losing current values', async () => {
+  let rejectFirst: (error: Error) => void;
+  request.mockImplementation(async (_url: any, options: any) => {
+    if (JSON.parse(options.body).data.postId === 42)
+      return new Promise((_, reject) => {
+        rejectFirst = reject;
+      });
+    return { ok: true, json: async () => schema() };
+  });
+  render(<Harness />);
+  act(() => latestForm.setValue('existing_post_id', 43));
+  await screen.findByDisplayValue('Existing question');
+  await act(async () => {
+    rejectFirst!(new Error('Old target failed'));
+  });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByDisplayValue('Existing question')).toBeTruthy();
+  expect(latestForm.getValues('voxel_fields')).toBeUndefined();
 });
