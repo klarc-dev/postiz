@@ -15,8 +15,9 @@ import { WordpressDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-set
 import {
   WordpressAuthor,
   WordpressOptionalText,
-  WordpressVoxelFields,
 } from '@gitroom/frontend/components/new-launch/providers/wordpress/wordpress.extras';
+
+import { WordpressVoxelFields } from '@gitroom/frontend/components/new-launch/providers/wordpress/wordpress.voxel';
 
 const WordpressSettings: FC = () => {
   const form = useSettings();
@@ -45,8 +46,16 @@ const WordpressSettings: FC = () => {
         description="Add a cover picture"
         {...form.register('main_image')}
       />
-      <WordpressOptionalText name="slug" label="Slug (optional, replaces the generated one)" placeholder="mon-article" />
-      <WordpressOptionalText name="excerpt" label="Excerpt (optional)" multiline />
+      <WordpressOptionalText
+        name="slug"
+        label="Slug (optional, replaces the generated one)"
+        placeholder="mon-article"
+      />
+      <WordpressOptionalText
+        name="excerpt"
+        label="Excerpt (optional)"
+        multiline
+      />
       <WordpressAuthor name="author" />
       <WordpressVoxelFields name="voxel_fields" />
     </>

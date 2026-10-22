@@ -4,6 +4,7 @@ module.exports = {
   rootDir: __dirname,
   testEnvironment: 'node',
   testMatch: [
+    '<rootDir>/apps/frontend/src/components/new-launch/providers/wordpress/wordpress.voxel.spec.tsx',
     '<rootDir>/libraries/nestjs-libraries/src/database/prisma/posts/wordpress.update.guard.spec.ts',
     '<rootDir>/apps/frontend/src/components/new-launch/wordpress.update.spec.ts',
     '<rootDir>/libraries/nestjs-libraries/src/integrations/social/youtube.provider.spec.ts',
@@ -15,11 +16,12 @@ module.exports = {
     '<rootDir>/libraries/nestjs-libraries/src/database/prisma/posts/wordpress.editorial.spec.ts',
   ],
   transform: {
-    '^.+\\.(?:[jt]s|mjs)$': [
+    '^.+\\.(?:[jt]sx?|mjs)$': [
       'ts-jest',
       {
         isolatedModules: true,
         tsconfig: {
+          jsx: 'react-jsx',
           allowJs: true,
           experimentalDecorators: true,
           emitDecoratorMetadata: true,
@@ -36,6 +38,7 @@ module.exports = {
     'node_modules/(?!(?:@exodus/bytes|isomorphic-dompurify|parse5|entities|@asamuzakjp|@csstools)/)',
   ],
   moduleNameMapper: {
+    '^@gitroom/frontend/(.*)$': '<rootDir>/apps/frontend/src/$1',
     '^@gitroom/nestjs-libraries/(.*)$': '<rootDir>/libraries/nestjs-libraries/src/$1',
     '^@gitroom/helpers/(.*)$': '<rootDir>/libraries/helpers/src/$1',
     '^@gitroom/plugins/(.*)$': '<rootDir>/libraries/plugins/src/$1',
