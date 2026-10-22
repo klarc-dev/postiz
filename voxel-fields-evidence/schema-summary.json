@@ -1,0 +1,101 @@
+{
+  "status": 201,
+  "supported": true,
+  "type": "posts",
+  "postType": "post",
+  "configStatus": "loaded",
+  "valuesStatus": "loaded",
+  "fields": [
+    {
+      "key": "sources",
+      "label": "Sources et références",
+      "type": "repeater"
+    },
+    {
+      "key": "excerpt",
+      "label": "Excerpt",
+      "type": "excerpt"
+    },
+    {
+      "key": "type",
+      "label": "Type d'article",
+      "type": "taxonomy"
+    },
+    {
+      "key": "h1",
+      "label": "Main Heading",
+      "type": "text"
+    },
+    {
+      "key": "_thumbnail_id",
+      "label": "Image",
+      "type": "image"
+    },
+    {
+      "key": "description",
+      "label": "Content",
+      "type": "description"
+    },
+    {
+      "key": "faq",
+      "label": "FAQ",
+      "type": "repeater"
+    },
+    {
+      "key": "url-youtube",
+      "label": "URL Youtube",
+      "type": "url"
+    },
+    {
+      "key": "takeaways",
+      "label": "Points clés",
+      "type": "repeater"
+    },
+    {
+      "key": "modified_date",
+      "label": "Date modified",
+      "type": "modified-date"
+    },
+    {
+      "key": "published_date",
+      "label": "Date created",
+      "type": "published-date"
+    },
+    {
+      "key": "author",
+      "label": "Author",
+      "type": "author"
+    },
+    {
+      "key": "parent",
+      "label": "Article parent",
+      "type": "parent"
+    },
+    {
+      "key": "hierarchy-ancestors",
+      "label": "Ancestors",
+      "type": "post-relation"
+    },
+    {
+      "key": "hierarchy-children",
+      "label": "Children",
+      "type": "post-relation"
+    },
+    {
+      "key": "hierarchy-siblings",
+      "label": "Siblings",
+      "type": "post-relation"
+    }
+  ],
+  "valueCounts": {
+    "sources": 2,
+    "type": 1,
+    "_thumbnail_id": 1,
+    "faq": 0,
+    "takeaways": 5,
+    "author": 1,
+    "hierarchy-ancestors": 7,
+    "hierarchy-children": 0,
+    "hierarchy-siblings": 11
+  }
+}
